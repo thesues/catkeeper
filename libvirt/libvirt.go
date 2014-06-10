@@ -93,6 +93,21 @@ func (c *VirConnection) ActiveDomainList() ([]VirDomain, error) {
 
 }
 
+
+func (c *VirConnection) IsAlive() (bool, error) {
+	switch result := int(C.virConnectIsAlive(c.ptr));result {
+	case -1:
+		return false, errors.New(GetLastError())
+	case 0:
+		return false, nil
+	case 1:
+		return true, nil
+	default:
+		return false, nil
+	}
+
+}
+
 func (c *VirConnection) InActiveDomainList() ([]VirDomain, error) {
 	var cDomainsNames [512](*C.char)
 	var err error

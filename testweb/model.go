@@ -5,7 +5,7 @@ import (
 	"log"
 	"fmt"
 
-	"dmzhang/libvirt"
+	"dmzhang/catkeeper/libvirt"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -19,16 +19,14 @@ type PhysicalMachine struct {
 	/* libvirt */
 	Existing   bool
 	VirtualMachines []*VirtualMachine
-	VirConn    *libvirt.VirConnection
+	VirConn    libvirt.VirConnection
 }
 
 func (p *PhysicalMachine) String() string{
 	var result = ""
-	for _, host := range p{
-		result += fmt.Sprintf("%s(%s)", p.Name, p.IpAddress)
-		for _, vmPtr := range host.VirtualMachines {
-			result += fmt.Sprintf(*vmPtr)
-		}
+	result += fmt.Sprintf("%s(%s)\n", p.Name, p.IpAddress)
+	for _, vmPtr:= range p.VirtualMachines{
+		result += fmt.Sprintf("%v\n",*vmPtr)
 
 	}
 
@@ -44,14 +42,22 @@ type VirtualMachine struct {
 
 	/* libvirt */
 	Name string
-	MyVirDomain libvirt.VirDomain
+	Active bool
+	VirDomain libvirt.VirDomain
 }
 
-var db *sql.DB
-var ipaddressConnectionMap = make(map[string]*libvirt.VirConnection)
-var vmidVirtualMachineMap  = make(map[int]*VirtualMachine)
 
-func getListofPhysicalMachine() []*PhysicalMachine {
+/* cached VirConnection */
+/* IpAddress => VirConnection */
+var ipaddressConnectionCache = make(map[string]libvirt.VirConnection)
+
+
+/* map vm ID(created in database) to VirtualMachine*/
+
+var mapVMIDtoVirtualMachine map[int]*VirtualMachine
+
+
+func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
 	/* read database to physicalmachine*/
 	var (
 		hosts       []*PhysicalMachine
@@ -74,20 +80,21 @@ func getListofPhysicalMachine() []*PhysicalMachine {
 			checkErr(err, "row scan failed")
 			return nil
 		}
-		hosts = append(hosts, &PhysicalMachine{Name:Name, Id:Id, IpAddress:IpAddress, Description:Description, VirConn:nil, Existing:false})
+		hosts = append(hosts, &PhysicalMachine{Name:Name, Id:Id, IpAddress:IpAddress, Description:Description, Existing:false})
 	}
 
 	/* read libvirt and set exist flag in PhysicalMachine*/
 	readLibvirt(hosts)
 
 	/* read virtualmachine from database */
+	mapVMIDtoVirtualMachine = make(map[int]*VirtualMachine)
 	for _, host := range hosts {
 		if host.Existing == true {
 			for _, vm := range host.VirtualMachines{
 				row := db.QueryRow("select Id, Owner, Description from virtualmachine where UUIDString = ?", vm.UUIDString)
 				if err = row.Scan(&Id, &Owner, &Description); err != nil {
 					/* not registered vm */
-					Owner = "no one"
+					Owner = "no one is using me"
 					Description = "I am new vm"
 					stmt, _ := db.Prepare("insert into virtualmachine(Owner, Description, UUIDString) values (?, ?, ?)")
 					_, err = stmt.Exec(Owner, Description, vm.UUIDString)
@@ -107,13 +114,26 @@ func getListofPhysicalMachine() []*PhysicalMachine {
 					vm.Owner = Owner
 					vm.Description = Description
 				}
-				/* fill the vmidVirtualMachineMap */
-				vmidVirtualMachineMap[vm.Id] = &vm;
+				/* create a map for all the hosts*/
+				mapVMIDtoVirtualMachine[vm.Id] = vm
 			}
 		}
 
 	}
-	/* create hash map for all the hosts*/
+	/* delete absoleted vm from database  */
+	rows, err = db.Query("select Id from virtualmachine")
+	if err != nil {
+		checkErr(err,"select Id from virtualmachine failed")
+		return hosts
+	}
+	for rows.Next() {
+		rows.Scan(&Id)
+		if _,ok := mapVMIDtoVirtualMachine[Id]; ok == true {
+			continue
+		}else {
+			db.Exec("delete from virtualmachine where Id=?",Id)
+		}
+	}
 	return hosts
 
 }
@@ -121,23 +141,31 @@ func getListofPhysicalMachine() []*PhysicalMachine {
 func readLibvirt(hosts []*PhysicalMachine) {
 	/* get libvirt connections */
 	for _, host := range(hosts) {
-		connPtr:= ipaddressConnectionMap[host.IpAddress]
-
-		if connPtr == nil {
+		conn,ok := ipaddressConnectionCache[host.IpAddress]
+		if ok == false {
 			conn, err := libvirt.NewVirConnection("qemu+ssh://root@" + host.IpAddress + "/system")
 			if err != nil {
 				checkErr(err,"Can not connect to remove libvirt")
 				host.Existing = false
 				continue
 			}
-			ipaddressConnectionMap[host.IpAddress] = &conn
-			host.VirConn =  &conn
+			host.VirConn =  conn
 			host.Existing = true
+			ipaddressConnectionCache[host.IpAddress] = conn
 		} else  {
-			/* existing a conn */
-			host.VirConn =  connPtr
-			host.Existing = true
+			/* existing a conn which is alive */
+			if ok ,_ := conn.IsAlive();ok {
+				host.VirConn =  conn
+				host.Existing = true
+			/* existing a conn which is dead */
+			} else {
+				host.Existing = false
+				delete(ipaddressConnectionCache, host.IpAddress)
+				/* TODO ?if close the connectin */
+				conn.CloseConnection()
+			}
 		}
+
 	}
 
 	/* receive data from VirConnections */
@@ -147,37 +175,14 @@ func readLibvirt(hosts []*PhysicalMachine) {
 			for _, virdomain := range domains {
 				name, _ := virdomain.GetName()
 				uuid, _ := virdomain.GetUUIDString()
-				vm := VirtualMachine{UUIDString:uuid, Name:name, MyVirDomain:virdomain}
+				active := virdomain.IsActive()
+				vm := VirtualMachine{UUIDString:uuid, Name:name, VirDomain:virdomain, Active:active}
 				host.VirtualMachines = append(host.VirtualMachines, &vm)
 			}
 		}
 
 	}
 
-}
-
-/* read libvirt */
-func main() {
-	var err error
-	db, err = sql.Open("sqlite3", "/tmp/post_db.bin")
-	if err != nil {
-		checkErr(err, "open database failed")
-	}
-	defer db.Close()
-
-	pm := getListofPhysicalMachine()
-	/* display */
-	fmt.Println(pm)
-	/* release domains */
-	for _, vm in range vmidVirtualMachineMap {
-		vm.DomainFree()
-	}
-	/* release connections */
-	for _, host in range ipaddressConnectionMap {
-		host.
-		host.VirDomain.CloseConnection()
-	}
-	/* goroutins */
 }
 
 func checkErr(err error, msg string) {
