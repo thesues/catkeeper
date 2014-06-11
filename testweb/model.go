@@ -24,7 +24,7 @@ type PhysicalMachine struct {
 
 func (p *PhysicalMachine) String() string{
 	var result = ""
-	result += fmt.Sprintf("%s(%s)\n", p.Name, p.IpAddress)
+	result += fmt.Sprintf("%s(%s)\n %v", p.Name, p.IpAddress, p.Existing)
 	for _, vmPtr:= range p.VirtualMachines{
 		result += fmt.Sprintf("%v\n",*vmPtr)
 
@@ -57,6 +57,9 @@ var ipaddressConnectionCache = make(map[string]libvirt.VirConnection)
 var mapVMIDtoVirtualMachine map[int]*VirtualMachine
 
 
+var numLiveHost int
+
+
 func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
 	/* read database to physicalmachine*/
 	var (
@@ -85,6 +88,7 @@ func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
 
 	/* read libvirt and set exist flag in PhysicalMachine*/
 	readLibvirt(hosts)
+
 
 	/* read virtualmachine from database */
 	mapVMIDtoVirtualMachine = make(map[int]*VirtualMachine)
@@ -121,42 +125,59 @@ func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
 
 	}
 	/* delete absoleted vm from database  */
+	/*
 	rows, err = db.Query("select Id from virtualmachine")
 	if err != nil {
 		checkErr(err,"select Id from virtualmachine failed")
 		return hosts
 	}
-	for rows.Next() {
-		rows.Scan(&Id)
-		if _,ok := mapVMIDtoVirtualMachine[Id]; ok == true {
-			continue
-		}else {
-			db.Exec("delete from virtualmachine where Id=?",Id)
-		}
-	}
+
+
+       for rows.Next() {
+               rows.Scan(&Id)
+               if _,ok := mapVMIDtoVirtualMachine[Id]; ok == true {
+                       continue
+               }else {
+                       db.Exec("delete from virtualmachine where Id=?",Id)
+               }
+       }
+       */
 	return hosts
 
 }
 
+/* use this type in chanStruct */
+type connResult struct {
+	host *PhysicalMachine
+	conn libvirt.VirConnection
+	existing bool
+}
+
 func readLibvirt(hosts []*PhysicalMachine) {
 	/* get libvirt connections */
+	numLiveHost = 0
+
+	connChan := make(chan connResult)
+	var numGoroutines = 0
 	for _, host := range(hosts) {
-		conn,ok := ipaddressConnectionCache[host.IpAddress]
+		conn, ok := ipaddressConnectionCache[host.IpAddress]
 		if ok == false {
-			conn, err := libvirt.NewVirConnection("qemu+ssh://root@" + host.IpAddress + "/system")
-			if err != nil {
-				checkErr(err,"Can not connect to remove libvirt")
-				host.Existing = false
-				continue
-			}
-			host.VirConn =  conn
-			host.Existing = true
-			ipaddressConnectionCache[host.IpAddress] = conn
+			numGoroutines ++
+			go func(host *PhysicalMachine){
+				conn, err := libvirt.NewVirConnection("qemu+ssh://root@" + host.IpAddress + "/system")
+				if err != nil {
+					checkErr(err,"Can not connect to remove libvirt")
+					host.Existing = false
+					connChan <- connResult{host:host,existing:false}
+				}
+				connChan <- connResult{host:host,conn:conn,existing:true}
+			}(host)
 		} else  {
 			/* existing a conn which is alive */
 			if ok ,_ := conn.IsAlive();ok {
 				host.VirConn =  conn
 				host.Existing = true
+				numLiveHost ++
 			/* existing a conn which is dead */
 			} else {
 				host.Existing = false
@@ -165,22 +186,42 @@ func readLibvirt(hosts []*PhysicalMachine) {
 				conn.CloseConnection()
 			}
 		}
-
 	}
 
+	for i:=0;i < numGoroutines ;i++{
+		r := <-connChan
+		if r.existing{
+			r.host.VirConn = r.conn
+			r.host.Existing = true
+			ipaddressConnectionCache[r.host.IpAddress] = r.conn
+			numLiveHost ++
+		}
+	}
+
+
+	/* all the PhysicalMachines are ready, VirConnection was connected now */
 	/* receive data from VirConnections */
+	done := make(chan bool)
 	for _, host := range(hosts) {
 		if host.Existing {
-			domains, _ := host.VirConn.ListAllDomains()
-			for _, virdomain := range domains {
-				name, _ := virdomain.GetName()
-				uuid, _ := virdomain.GetUUIDString()
-				active := virdomain.IsActive()
-				vm := VirtualMachine{UUIDString:uuid, Name:name, VirDomain:virdomain, Active:active}
-				host.VirtualMachines = append(host.VirtualMachines, &vm)
-			}
+			go func(host *PhysicalMachine){
+				domains, _ := host.VirConn.ListAllDomains()
+				for _, virdomain := range domains {
+					name, _ := virdomain.GetName()
+					uuid, _ := virdomain.GetUUIDString()
+					active := virdomain.IsActive()
+					vm := VirtualMachine{UUIDString:uuid, Name:name, VirDomain:virdomain, Active:active}
+					/* not thread safe */
+					host.VirtualMachines = append(host.VirtualMachines, &vm)
+				}
+				done <- true
+			}(host)
 		}
 
+	}
+	/* wait for all ListAllDomains finish */
+	for i:=0; i< numLiveHost ; i++ {
+		<-done
 	}
 
 }
