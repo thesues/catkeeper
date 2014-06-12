@@ -44,6 +44,7 @@ type VirtualMachine struct {
 	Name string
 	Active bool
 	VNCAddress string
+	VNCPort    string
 	VirDomain libvirt.VirDomain
 }
 
@@ -233,11 +234,13 @@ func readLibvirt(hosts []*PhysicalMachine) {
 					/* if VNCport is -1, this means the domain is closed */
 					var active = false
 					var vncAddress = ""
+					var vncPort = ""
 					if (v.Devices.Graphics.VNCPort != "-1") {
 						active = true
-						vncAddress = host.IpAddress + ":" + v.Devices.Graphics.VNCPort
+						vncAddress = host.IpAddress
+						vncPort =  v.Devices.Graphics.VNCPort
 					}
-					vm := VirtualMachine{UUIDString:v.UUID, Name:v.Name, VirDomain:virdomain, Active:active, VNCAddress:vncAddress}
+					vm := VirtualMachine{UUIDString:v.UUID, Name:v.Name, VirDomain:virdomain, Active:active, VNCAddress:vncAddress, VNCPort:vncPort}
 					host.VirtualMachines = append(host.VirtualMachines, &vm)
 				}
 				done <- true
