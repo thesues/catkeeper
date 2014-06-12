@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"fmt"
+	"encoding/xml"
 
 	"dmzhang/catkeeper/libvirt"
 	_ "github.com/mattn/go-sqlite3"
@@ -43,7 +44,13 @@ type VirtualMachine struct {
 	/* libvirt */
 	Name string
 	Active bool
+	VNCPort  string
 	VirDomain libvirt.VirDomain
+}
+
+
+func (vm *VirtualMachine) String() string {
+	return vm.Name + vm.VNCPort
 }
 
 
@@ -146,19 +153,20 @@ func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
 
 }
 
-/* use this type in chanStruct */
-type connResult struct {
-	host *PhysicalMachine
-	conn libvirt.VirConnection
-	existing bool
-}
 
 func readLibvirt(hosts []*PhysicalMachine) {
 	/* get libvirt connections */
 	numLiveHost = 0
 
+	/* use this type in chanStruct */
+	type connResult struct {
+		host *PhysicalMachine
+		conn libvirt.VirConnection
+		existing bool
+	}
 	connChan := make(chan connResult)
 	var numGoroutines = 0
+
 	for _, host := range(hosts) {
 		conn, ok := ipaddressConnectionCache[host.IpAddress]
 		if ok == false {
@@ -201,17 +209,38 @@ func readLibvirt(hosts []*PhysicalMachine) {
 
 	/* all the PhysicalMachines are ready, VirConnection was connected now */
 	/* receive data from VirConnections */
+
+	type VNCinfo struct {
+		VNCPort string `xml:"port,attr"`
+	}
+	type xmlParseResult struct {
+		Name string    `xml:"name"`
+		UUID string    `xml:"uuid"`
+		Graphics VNCinfo `xml:"graphics"`
+
+	}
+	/* these two types are used to parse <<EOF
+	<domain type='kvm' id='2'>
+	    <name>cl8_n1_sles12b8</name>
+	    <uuid>016db229-a046-26a8-3956-85c7fca5f969</uuid>
+	    <graphics type='vnc' port='5900' autoport='yes' listen='0.0.0.0'>
+	      <listen type='address' address='0.0.0.0'/>
+	      </graphics>
+	      </domain>
+	EOF */
+
 	done := make(chan bool)
 	for _, host := range(hosts) {
 		if host.Existing {
 			go func(host *PhysicalMachine){
 				domains, _ := host.VirConn.ListAllDomains()
 				for _, virdomain := range domains {
-					name, _ := virdomain.GetName()
-					uuid, _ := virdomain.GetUUIDString()
+					v := xmlParseResult{}
+					xmlData,_ := virdomain.GetXMLDesc()
+					xml.Unmarshal([]byte(xmlData), &v)
 					active := virdomain.IsActive()
-					vm := VirtualMachine{UUIDString:uuid, Name:name, VirDomain:virdomain, Active:active}
-					/* not thread safe */
+					vm := VirtualMachine{UUIDString:v.UUID, Name:v.Name, VNCPort:v.Graphics.VNCPort, VirDomain:virdomain, Active:active}
+					fmt.Println(vm)
 					host.VirtualMachines = append(host.VirtualMachines, &vm)
 				}
 				done <- true

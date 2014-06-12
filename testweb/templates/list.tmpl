@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+	<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
+  </head>
+
+  <body style="margin: 20px;">
+    <h1>Machine List</h1>
+    {{range .}}
+         <h3>{{.Name}}({{.IpAddress}})  {{.Description}}</h3>
+	<div class="row">
+	      <div class="col-md-3"> Name </div>
+	      <div class="col-md-1"> Running</div>
+	      <div class="col-md-2"> Owner </div>
+	      <div class="col-md-4"> Description</div>
+	</div>
+	      {{range .VirtualMachines}}
+	<div class="row">
+	      <div class="col-md-3"> {{.Name}}  </div>
+              <div class="col-md-1"> {{.Active}}</div>
+              <div class="col-md-2"> {{.Owner}} </div>
+              <div class="col-md-4"> {{.Description}} </div>
+	</div>
+	      {{end}}
+    {{ end }}
+<!--
+    <h1>Machine List</h1>
+    <form action="/wishes" method="POST" class="pure-form">
+      <input type="text" name="name" placeholder="name" />
+      <input type="text" name="description" placeholder="description" />
+      <input type="submit" value="submit" class="pure-button pure-button-primary"/>
+    </form>
+-->
+  </body>
+</html>

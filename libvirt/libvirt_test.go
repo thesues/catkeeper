@@ -72,3 +72,18 @@ func TestActiveDomainList(t *testing.T) {
 		fmt.Printf(name)
 	}
 }
+
+func TestGetXml(t *testing.T) {
+	con, err := NewVirConnection("qemu+ssh://root@147.2.207.233/system")
+	if (err != nil) {
+		t.Error(err)
+		return
+	}
+	defer con.CloseConnection()
+	domainList,err := con.ListAllDomains()
+	for _ , i := range domainList {
+		xml,_ := i.GetXMLDesc()
+		fmt.Println(xml)
+		i.DomainFree()
+	}
+}
