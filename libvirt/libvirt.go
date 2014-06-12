@@ -253,7 +253,7 @@ func (d *VirDomain) IsActive() bool {
 
 
 func (d *VirDomain) GetXMLDesc() (string, error) {
-	result := C.virDomainGetXMLDesc(d.ptr, C.VIR_DOMAIN_XML_INACTIVE)
+	result := C.virDomainGetXMLDesc(d.ptr, C.VIR_DOMAIN_XML_SECURE)
 	if result == nil {
 		return "", errors.New(GetLastError())
 	}

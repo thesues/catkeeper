@@ -25,10 +25,9 @@ type PhysicalMachine struct {
 
 func (p *PhysicalMachine) String() string{
 	var result = ""
-	result += fmt.Sprintf("%s(%s)\n %v", p.Name, p.IpAddress, p.Existing)
+	result += fmt.Sprintf("%s(%s) running?%t\n", p.Name, p.IpAddress, p.Existing)
 	for _, vmPtr:= range p.VirtualMachines{
-		result += fmt.Sprintf("%v\n",*vmPtr)
-
+		result += fmt.Sprintf("%s\n",vmPtr)
 	}
 
 	return result
@@ -44,13 +43,13 @@ type VirtualMachine struct {
 	/* libvirt */
 	Name string
 	Active bool
-	VNCPort  string
+	VNCAddress string
 	VirDomain libvirt.VirDomain
 }
 
+func (this * VirtualMachine) String() string {
+	return fmt.Sprintf("%s %s", this.Name, this.VNCAddress)
 
-func (vm *VirtualMachine) String() string {
-	return vm.Name + vm.VNCPort
 }
 
 
@@ -211,23 +210,16 @@ func readLibvirt(hosts []*PhysicalMachine) {
 	/* receive data from VirConnections */
 
 	type VNCinfo struct {
-		VNCPort string `xml:"port,attr"`
-	}
-	type xmlParseResult struct {
-		Name string    `xml:"name"`
-		UUID string    `xml:"uuid"`
-		Graphics VNCinfo `xml:"graphics"`
-
-	}
-	/* these two types are used to parse <<EOF
-	<domain type='kvm' id='2'>
-	    <name>cl8_n1_sles12b8</name>
-	    <uuid>016db229-a046-26a8-3956-85c7fca5f969</uuid>
-	    <graphics type='vnc' port='5900' autoport='yes' listen='0.0.0.0'>
-	      <listen type='address' address='0.0.0.0'/>
-	      </graphics>
-	      </domain>
-	EOF */
+                VNCPort string `xml:"port,attr"`
+        }
+        type Devices struct {
+                Graphics VNCinfo `xml:"graphics"`
+        }
+        type xmlParseResult struct {
+                Name string    `xml:"name"`
+                UUID string    `xml:"uuid"`
+		Devices  Devices `xml:"devices"`
+        }
 
 	done := make(chan bool)
 	for _, host := range(hosts) {
@@ -236,11 +228,16 @@ func readLibvirt(hosts []*PhysicalMachine) {
 				domains, _ := host.VirConn.ListAllDomains()
 				for _, virdomain := range domains {
 					v := xmlParseResult{}
-					xmlData,_ := virdomain.GetXMLDesc()
+					xmlData, _ := virdomain.GetXMLDesc()
 					xml.Unmarshal([]byte(xmlData), &v)
-					active := virdomain.IsActive()
-					vm := VirtualMachine{UUIDString:v.UUID, Name:v.Name, VNCPort:v.Graphics.VNCPort, VirDomain:virdomain, Active:active}
-					fmt.Println(vm)
+					/* if VNCport is -1, this means the domain is closed */
+					var active = false
+					var vncAddress = ""
+					if (v.Devices.Graphics.VNCPort != "-1") {
+						active = true
+						vncAddress = host.IpAddress + ":" + v.Devices.Graphics.VNCPort
+					}
+					vm := VirtualMachine{UUIDString:v.UUID, Name:v.Name, VirDomain:virdomain, Active:active, VNCAddress:vncAddress}
 					host.VirtualMachines = append(host.VirtualMachines, &vm)
 				}
 				done <- true
