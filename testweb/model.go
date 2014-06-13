@@ -49,7 +49,7 @@ type VirtualMachine struct {
 }
 
 func (this * VirtualMachine) String() string {
-	return fmt.Sprintf("%s %s", this.Name, this.VNCAddress)
+	return fmt.Sprintf("%s %s:%s", this.Name, this.VNCAddress, this.VNCPort)
 
 }
 
@@ -231,7 +231,7 @@ func readLibvirt(hosts []*PhysicalMachine) {
 					v := xmlParseResult{}
 					xmlData, _ := virdomain.GetXMLDesc()
 					xml.Unmarshal([]byte(xmlData), &v)
-					/* if VNCport is -1, this means the domain is closed */
+					/* if VNCPort is -1, this means the domain is closed */
 					var active = false
 					var vncAddress = ""
 					var vncPort = ""
