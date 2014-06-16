@@ -16,10 +16,17 @@
 	</div>
 	      {{range .VirtualMachines}}
 	<div class="row">
-	      <div class="col-md-3"> {{.Name}}  </div>
+	      <div class="col-md-3"> 
+	     {{if .VNCAddress}}
+              <a href="http://127.0.0.1:3000/vnc_auto.html?path=websockify?ip={{.VNCAddress}}:{{.VNCPort}}">{{.Name}}</a>
+              {{else}}
+		{{.Name}}	
+              {{end}}
+              </div>
               <div class="col-md-1"> {{.Active}}</div>
               <div class="col-md-2"> {{.Owner}} </div>
               <div class="col-md-4"> {{.Description}} </div>
+	      <div class="col-md-1"> <a href="http://127.0.0.1:3000/vm/{{.Id}}">EDIT</a></div>
 	</div>
 	      {{end}}
     {{ end }}

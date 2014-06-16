@@ -35,16 +35,14 @@ func main() {
     m.Get("/websockify", func(w http.ResponseWriter, r *http.Request) {
 	   var v vncAddress
 	   values := r.URL.Query()
-	   _, hasIp := values["ip"]
-	   _, hasPort := values["port"]
-	   if hasIp && hasPort {
-		   v = vncAddress(values["ip"][0] + ":" + values["port"][0])
+	   log.Println(values)
+	   _, hasIp:= values["ip"]
+	   if hasIp {
+		   v = vncAddress(values["ip"][0])
 	   } else {
 		   log.Println("faile to parse vnc address")
 		   return
 	   }
-
-	   log.Println(values)
 
 
 	   wsConfig, _ := websocket.NewConfig("ws://127.0.0.1:3000/", "http://127.0.0.1:3000")
@@ -67,7 +65,6 @@ func (v vncAddress) handle(ws *websocket.Conn) {
 	vc, err := net.Dial("tcp", string(v))
 	defer vc.Close()
 	if err != nil {
-		log.Print(err)
 		return
 	}
 	log.Println("new connection")
