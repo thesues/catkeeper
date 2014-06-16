@@ -32,37 +32,30 @@ func main() {
 	    r.HTML(200, "list" , pm)
     })
 
-    m.Get("/websockify", func(w http.ResponseWriter, r *http.Request) {
-	   var v vncAddress
-	   values := r.URL.Query()
-	   log.Println(values)
-	   _, hasIp:= values["ip"]
-	   if hasIp {
-		   v = vncAddress(values["ip"][0])
-	   } else {
-		   log.Println("faile to parse vnc address")
-		   return
-	   }
 
+    wsConfig, _ := websocket.NewConfig("ws://127.0.0.1:3000", "http://127.0.0.1:3000")
+    ws := websocket.Server{Handler:proxyHandler,
+			    Config: *wsConfig,
+                           Handshake: func(ws *websocket.Config, req *http.Request) error {
+			    ws.Protocol = []string{"base64"}
+			    return nil
+    }}
 
-	   wsConfig, _ := websocket.NewConfig("ws://127.0.0.1:3000/", "http://127.0.0.1:3000")
-	   ws := websocket.Server{Handler: v.handle,
-		Config: *wsConfig,
-		Handshake: func(ws *websocket.Config, req *http.Request) error {
-			ws.Protocol = []string{"base64"}
-			return nil
-		}}
-	   ws.ServeHTTP(w,r)
-    })
+    m.Get("/websockify", ws.ServeHTTP)
 
     m.Run()
 }
 
-type vncAddress string
+func proxyHandler(ws *websocket.Conn) {
+	r := ws.Request()
+	values := r.URL.Query()
+	ip, hasIp:= values["ip"]
+	if !hasIp {
+		log.Println("faile to parse vnc address")
+		return
+	}
 
-func (v vncAddress) handle(ws *websocket.Conn) {
-	log.Println(v)
-	vc, err := net.Dial("tcp", string(v))
+	vc, err := net.Dial("tcp", ip[0])
 	defer vc.Close()
 	if err != nil {
 		return

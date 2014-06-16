@@ -185,8 +185,7 @@
             }
 
             password = WebUtil.getQueryVar('password', '');
-            path = WebUtil.getQueryVar('path', 'websockify?ip=147.2.207.233:5903');
-	    console.log(path);
+            path = WebUtil.getQueryVar('path', '');
 
             if ((!host) || (!port)) {
                 updateState('failed',

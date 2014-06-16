@@ -281,6 +281,7 @@ function init(protocols) {
     // Check for full binary type support in WebSockets
     // TODO: this sucks, the property should exist on the prototype
     // but it does not.
+    /*
     try {
         if (bt && ('binaryType' in (new WebSocket("ws://localhost:17523")))) {
             Util.Info("Detected binaryType support in WebSockets");
@@ -289,6 +290,7 @@ function init(protocols) {
     } catch (exc) {
         // Just ignore failed test localhost connections
     }
+    */
 
     // Default protocols if not specified
     if (typeof(protocols) === "undefined") {
