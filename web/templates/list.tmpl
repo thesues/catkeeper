@@ -24,7 +24,7 @@
 	<tr>
 	<td>
 	{{if .VNCAddress}}
-	<a href="http://127.0.0.1:3000/vnc_auto.html?patd=websockify?ip={{.VNCAddress}}:{{.VNCPort}}">{{.Name}}</a>
+	<a href="http://127.0.0.1:3000/vnc_auto.html?path=websockify?ip={{.VNCAddress}}:{{.VNCPort}}">{{.Name}}</a>
 	{{else}}
 	  {{.Name}}	
 	{{end}}
