@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+  <head>
+	 <meta charset="utf-8">
+	 <meta http-equiv="X-UA-Compatible" content="IE=edge">
+	 <meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
+
+	 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+	<script src="//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
+  </head>
+
+  <body style="margin: 20px;">
+    <div class="container">
+	<h1>Machine List</h1>
+    {{range .}}
+        <h3>{{.Name}}({{.IpAddress}})  {{.Description}}</h3>
+	<table class="table table-hover table-condensed">
+	<thead>
+	<tr class=info> <th>Name</th> <th>Running</th> <th>Owner</th> <th>Description</th> <th>EDIT</th></tr>
+         </thead>
+	<tbody>
+	{{range .VirtualMachines}}
+	<tr>
+	<td>
+	{{if .VNCAddress}}
+	<a href="http://127.0.0.1:3000/vnc_auto.html?patd=websockify?ip={{.VNCAddress}}:{{.VNCPort}}">{{.Name}}</a>
+	{{else}}
+	  {{.Name}}	
+	{{end}}
+	</td>
+	<td>{{.Active}}</td>
+	<td>{{.Owner}} </td>
+	<td>{{.Description}} </td>
+	<td>
+	<a href="http://127.0.0.1:3000/vm/{{.Id}}" class="btn btn-success btn-xs active" role="button">EDIT</a>
+	</td>
+	</tr>
+	{{end}}
+	</tbody>
+	</table>
+    {{ end }}
+<!--
+    <h1>Machine List</h1>
+    <form action="/wishes" method="POST" class="pure-form">
+      <input type="text" name="name" placeholder="name" />
+      <input type="text" name="description" placeholder="description" />
+      <input type="submit" value="submit" class="pure-button pure-button-primary"/>
+    </form>
+-->
+</div>
+  </body>
+</html>
