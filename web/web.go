@@ -11,6 +11,8 @@ import (
 	"code.google.com/p/go.net/websocket"
 	"encoding/base64"
 	"net"
+	"strconv"
+
 )
 
 func main() {
@@ -32,11 +34,22 @@ func main() {
 	    r.HTML(200, "list" , pm)
     })
 
+    //TODO
+    m.Get("/vm/(?P<id>[0-9]+)", func(r render.Render, params martini.Params){
+	    id,_ := strconv.Atoi(params["id"])
+	    vm := getVirtualMachine(db,id)
+	    r.HTML(200, "vm", vm)
+    })
+
+    m.Post("/vm/(?P<id>[0-9]+)", func(params martini.Params, req * http.Request) {
+	    req.ParseForm()
+	    log.Println(req.PostForm)
+    })
+
 
     wsConfig, _ := websocket.NewConfig("ws://127.0.0.1:3000", "http://127.0.0.1:3000")
     ws := websocket.Server{Handler:proxyHandler,
-			    Config: *wsConfig,
-                           Handshake: func(ws *websocket.Config, req *http.Request) error {
+			    Config: *wsConfig, Handshake: func(ws *websocket.Config, req *http.Request) error {
 			    ws.Protocol = []string{"base64"}
 			    return nil
     }}

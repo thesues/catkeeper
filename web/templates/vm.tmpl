@@ -1,0 +1,10 @@
+<html>
+<body>
+{{.Name}}
+<form action="/vm/{{.Id}}" method="POST">
+<input type="submit" name="start" value="Start">
+<input type="submit" name="stop" value="Stop">
+<input type="submit" name="fstop" value="Force Stop">
+</form>
+</body>
+</html>

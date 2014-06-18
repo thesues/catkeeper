@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"encoding/xml"
 
+	"sync"
 	"dmzhang/catkeeper/libvirt"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -39,6 +40,7 @@ type VirtualMachine struct {
 	UUIDString  string /*set by libvirt*/
 	Owner       string
 	Description string
+	HostIpAddress string
 
 	/* libvirt */
 	Name string
@@ -54,18 +56,44 @@ func (this * VirtualMachine) String() string {
 }
 
 
-/* cached VirConnection */
-/* IpAddress => VirConnection */
+// cached VirConnection
+//IpAddress => VirConnection
 var ipaddressConnectionCache = make(map[string]libvirt.VirConnection)
 
+// cacheMutex is used to protect the ipaddressConnectionCache map from multiple users 
+var cacheMutex = &sync.Mutex{}
 
 /* map vm ID(created in database) to VirtualMachine*/
+// not used any more
+//var mapVMIDtoVirtualMachine map[int]*VirtualMachine
 
-var mapVMIDtoVirtualMachine map[int]*VirtualMachine
 
 
-var numLiveHost int
+func getVirtualMachine(db *sql.DB, Id int) *VirtualMachine {
+	var (
+		UUIDString string
+		Owner  string
+		Description string
+		HostIpAddress string
+	)
 
+	row  := db.QueryRow("select Id,UUIDString,Owner, Description, HostIpAddress from virtualmachine where Id=?",Id)
+	if err := row.Scan(&Id, &UUIDString, &Owner, &Description, &HostIpAddress); err !=nil {
+		checkErr(err, "failed to scan in getVirtualMachine")
+		return nil
+	}
+	vm, err :=  readLibvirtVM(HostIpAddress, UUIDString)
+
+	if (err != nil) {
+		checkErr(err,"failed to get information from libvirt")
+		return nil
+	}
+	vm.Id = Id
+	vm.Owner = Owner
+	vm.Description = Description
+	vm.HostIpAddress = HostIpAddress
+	return &vm
+}
 
 func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
 	/* read database to physicalmachine*/
@@ -94,11 +122,10 @@ func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
 	}
 
 	/* read libvirt and set exist flag in PhysicalMachine*/
-	readLibvirt(hosts)
+	readLibvirtPysicalMachine(hosts)
 
 
 	/* read virtualmachine from database */
-	mapVMIDtoVirtualMachine = make(map[int]*VirtualMachine)
 	for _, host := range hosts {
 		if host.Existing == true {
 			for _, vm := range host.VirtualMachines{
@@ -107,15 +134,15 @@ func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
 					/* not registered vm */
 					Owner = "no one is using me"
 					Description = "I am new vm"
-					stmt, _ := db.Prepare("insert into virtualmachine(Owner, Description, UUIDString) values (?, ?, ?)")
-					_, err = stmt.Exec(Owner, Description, vm.UUIDString)
+					stmt, _ := db.Prepare("insert into virtualmachine(Owner, Description, UUIDString,HostIpAddress) values (?, ?, ?, ?)")
+					_, err = stmt.Exec(Owner, Description, vm.UUIDString, host.IpAddress)
 					if err != nil {
 						checkErr(err, "failed to create info for vm")
 						continue
 					}
 					/* re-select again*/
 					row = db.QueryRow("select Id, Owner, Description from virtualmachine where UUIDString = ?", vm.UUIDString)
-					rows.Scan(&Id, &Owner, &Description)
+					row.Scan(&Id, &Owner, &Description)
 					vm.Id = Id
 					vm.Owner = Owner
 					vm.Description = Description
@@ -125,13 +152,11 @@ func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
 					vm.Owner = Owner
 					vm.Description = Description
 				}
-				/* create a map for all the hosts*/
-				mapVMIDtoVirtualMachine[vm.Id] = vm
 			}
 		}
 
 	}
-	/* delete absoleted vm from database  */
+	// delete absoleted vm from database
 	/*
 	rows, err = db.Query("select Id from virtualmachine")
 	if err != nil {
@@ -153,10 +178,64 @@ func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
 
 }
 
+func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, error) {
+	var conn libvirt.VirConnection
+	var err error
+	conn, ok := ipaddressConnectionCache[HostIpAddress]
+	if ok == false {
+		conn, err = libvirt.NewVirConnection("qemu+ssh://root@" + HostIpAddress + "/system")
+		if err != nil {
+			return VirtualMachine{},err
+		}
+		/*TODO Write Lock*/
+		cacheMutex.Lock()
+		ipaddressConnectionCache[HostIpAddress] = conn
+		cacheMutex.Unlock()
+	} else {
+		//?How to deal with connection's not alive
+		if ok ,_ := conn.IsAlive();!ok {
+			log.Println("Not alive")
+		}
+	}
 
-func readLibvirt(hosts []*PhysicalMachine) {
+	domain, err := conn.LookupByUUIDString(UUIDString)
+	if err != nil {
+		return VirtualMachine{},err
+	}
+	vm := fillVmData(domain)
+	return vm,nil
+}
+
+
+//TODO: in the futhure, use vm := VirtualMachine{};fillvmData(domain,vm)
+func fillVmData(domain libvirt.VirDomain) VirtualMachine {
+	type VNCinfo struct {
+		VNCPort string `xml:"port,attr"`
+	}
+	type Devices struct {
+		Graphics VNCinfo `xml:"graphics"`
+	}
+	type xmlParseResult struct {
+		Name string    `xml:"name"`
+		UUID string    `xml:"uuid"`
+		Devices  Devices `xml:"devices"`
+	}
+	v := xmlParseResult{}
+	xmlData, _ := domain.GetXMLDesc()
+	xml.Unmarshal([]byte(xmlData), &v)
+	/* if VNCPort is -1, this means the domain is closed */
+	var active = false
+	var vncPort = ""
+	if (v.Devices.Graphics.VNCPort != "-1") {
+		active = true
+		vncPort =  v.Devices.Graphics.VNCPort
+	}
+	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain}
+}
+
+func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 	/* get libvirt connections */
-	numLiveHost = 0
+	numLiveHost := 0
 
 	/* use this type in chanStruct */
 	type connResult struct {
@@ -201,7 +280,10 @@ func readLibvirt(hosts []*PhysicalMachine) {
 		if r.existing{
 			r.host.VirConn = r.conn
 			r.host.Existing = true
+			/*Write Lock*/
+			cacheMutex.Lock()
 			ipaddressConnectionCache[r.host.IpAddress] = r.conn
+			cacheMutex.Unlock()
 			numLiveHost ++
 		}
 	}
@@ -210,37 +292,16 @@ func readLibvirt(hosts []*PhysicalMachine) {
 	/* all the PhysicalMachines are ready, VirConnection was connected now */
 	/* receive data from VirConnections */
 
-	type VNCinfo struct {
-                VNCPort string `xml:"port,attr"`
-        }
-        type Devices struct {
-                Graphics VNCinfo `xml:"graphics"`
-        }
-        type xmlParseResult struct {
-                Name string    `xml:"name"`
-                UUID string    `xml:"uuid"`
-		Devices  Devices `xml:"devices"`
-        }
-
 	done := make(chan bool)
 	for _, host := range(hosts) {
 		if host.Existing {
 			go func(host *PhysicalMachine){
 				domains, _ := host.VirConn.ListAllDomains()
 				for _, virdomain := range domains {
-					v := xmlParseResult{}
-					xmlData, _ := virdomain.GetXMLDesc()
-					xml.Unmarshal([]byte(xmlData), &v)
-					/* if VNCPort is -1, this means the domain is closed */
-					var active = false
-					var vncAddress = ""
-					var vncPort = ""
-					if (v.Devices.Graphics.VNCPort != "-1") {
-						active = true
-						vncAddress = host.IpAddress
-						vncPort =  v.Devices.Graphics.VNCPort
-					}
-					vm := VirtualMachine{UUIDString:v.UUID, Name:v.Name, VirDomain:virdomain, Active:active, VNCAddress:vncAddress, VNCPort:vncPort}
+					vm := fillVmData(virdomain)
+					//list do not have any operations on vm, virdomain could be freeed
+					vm.VNCAddress = host.IpAddress
+					virdomain.DomainFree()
 					host.VirtualMachines = append(host.VirtualMachines, &vm)
 				}
 				done <- true

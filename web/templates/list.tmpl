@@ -23,7 +23,7 @@
 	{{range .VirtualMachines}}
 	<tr>
 	<td>
-	{{if .VNCAddress}}
+	{{if .Active}}
 	<a href="http://127.0.0.1:3000/vnc_auto.html?path=websockify?ip={{.VNCAddress}}:{{.VNCPort}}">{{.Name}}</a>
 	{{else}}
 	  {{.Name}}	
