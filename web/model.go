@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"encoding/xml"
 
+	"errors"
 	"sync"
 	"dmzhang/catkeeper/libvirt"
 	_ "github.com/mattn/go-sqlite3"
@@ -50,11 +51,47 @@ type VirtualMachine struct {
 	VirDomain libvirt.VirDomain
 }
 
-func (this * VirtualMachine) String() string {
+func (this *VirtualMachine) String() string {
 	return fmt.Sprintf("%s %s:%s", this.Name, this.VNCAddress, this.VNCPort)
 
 }
 
+
+func (this *VirtualMachine) Start() error{
+	err := this.VirDomain.Create()
+	return err
+
+}
+
+
+func (this *VirtualMachine) Stop() error {
+	err := this.VirDomain.Shutdown()
+	return err
+}
+
+
+func (this *VirtualMachine) ForceStop() error {
+	err := this.VirDomain.Destroy()
+	return err
+}
+
+func (this *VirtualMachine) DomainFree() error {
+	err := this.VirDomain.DomainFree()
+	return err
+}
+
+func (this *VirtualMachine) UpdateDatabase(db *sql.DB, owner string, description string) error {
+	if owner != "" && description != "" {
+		_, err := db.Exec("update virtualmachine set Owner=?,Description=? where Id=?", owner, description, this.Id)
+		if err!= nil {
+			return err
+		}else {
+			return nil
+		}
+	} else {//can not be updated
+		return errors.New("owner and description must have values")
+	}
+}
 
 // cached VirConnection
 //IpAddress => VirConnection
@@ -95,7 +132,7 @@ func getVirtualMachine(db *sql.DB, Id int) *VirtualMachine {
 	return &vm
 }
 
-func getListofPhysicalMachine(db *sql.DB) []*PhysicalMachine {
+func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 	/* read database to physicalmachine*/
 	var (
 		hosts       []*PhysicalMachine
@@ -299,8 +336,10 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 				domains, _ := host.VirConn.ListAllDomains()
 				for _, virdomain := range domains {
 					vm := fillVmData(virdomain)
-					//list do not have any operations on vm, virdomain could be freeed
-					vm.VNCAddress = host.IpAddress
+					if vm.Active == true {
+						vm.VNCAddress = host.IpAddress
+					}
+					//will not have any operations on vm, virdomain could be freeed
 					virdomain.DomainFree()
 					host.VirtualMachines = append(host.VirtualMachines, &vm)
 				}

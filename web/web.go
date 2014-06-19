@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"net"
 	"strconv"
+	"fmt"
 
 )
 
@@ -30,22 +31,117 @@ func main() {
 
 
     m.Get("/", func(r render.Render){
-	    pm := getListofPhysicalMachine(db)
+	    pm := getListofPhysicalMachineAndVirtualMachine(db)
 	    r.HTML(200, "list" , pm)
     })
 
-    //TODO
+    m.Get("/create", func(r render.Render) {
+	    var Name string
+	    var IpAddress string
+
+	    type HostInfo struct {
+		    Name string
+		    IpAddress string
+	    }
+
+	    var hosts []HostInfo
+
+	    rows, err := db.Query("select Name,IpAddress from physicalmachine")
+	    if err != nil {
+		    reportError(r, err, "failed to find physicalmachine")
+	    }
+	    for rows.Next() {
+		    rows.Scan(&Name, &IpAddress)
+		    hosts = append(hosts, HostInfo{Name, IpAddress})
+	    }
+	    log.Println(hosts)
+	    r.HTML(200, "create", hosts)
+    })
+
+    m.Post("/create", func(r render.Render, req *http.Request) {
+	    r.HTML(200, "create", nil)
+    })
+
+
+    m.Get("/add", func(r render.Render) {
+	    r.HTML(200, "add", nil)
+
+    })
+    //missing validation 
+    m.Post("/add", func(r render.Render, req *http.Request) {
+	    var existingname string
+	    name := req.PostFormValue("Name")
+	    description := req.PostFormValue("Description")
+	    IPAddress := req.PostFormValue("IPAddress")
+	    log.Println(name+description+IPAddress)
+	    //TODO: add more validations
+	    err := db.QueryRow("select name from physicalmachine where IpAddress = ?", IPAddress).Scan(&existingname)
+	    switch {
+		    case err == sql.ErrNoRows:
+			    // good to insert the PhysicalMachine
+			    db.Exec("insert into physicalmachine (Name, IpAddress, Description) values(?,?,?)", name, IPAddress,description)
+			    r.Redirect("/")
+		    case err != nil:
+			    //other error happens
+			    r.HTML(501,"error", err)
+		    default:
+			    //no error happens
+			    r.HTML(501,"error",fmt.Errorf("already has the physical machine %s", existingname))
+
+	   }
+
+    })
+
     m.Get("/vm/(?P<id>[0-9]+)", func(r render.Render, params martini.Params){
 	    id,_ := strconv.Atoi(params["id"])
 	    vm := getVirtualMachine(db,id)
 	    r.HTML(200, "vm", vm)
     })
 
-    m.Post("/vm/(?P<id>[0-9]+)", func(params martini.Params, req * http.Request) {
-	    req.ParseForm()
-	    log.Println(req.PostForm)
+
+    m.Get("/create", func(r render.Render, req *http.Request) {
+	    r.Redirect("http://www.baidu.com", 200)
     })
 
+    m.Post("/vm/(?P<id>[0-9]+)", func(r render.Render, params martini.Params, req *http.Request) {
+	    req.ParseForm()
+	    submitType := req.PostFormValue("submit")
+	    id,_ := strconv.Atoi(params["id"])
+	    vm := getVirtualMachine(db,id)
+	    var err error
+	    switch submitType {
+	    case "Start":
+		    err = vm.Start()
+		    vm.DomainFree()
+	    case "Stop":
+		    err = vm.Stop()
+		    //TODO: wait a while
+		    vm.DomainFree()
+	    case "ForceStop":
+		    err = vm.ForceStop()
+		    vm.DomainFree()
+	    case "Update":
+		    owner := req.PostForm["Owner"][0]
+		    description := req.PostForm["Description"][0]
+		    err = vm.UpdateDatabase(db, owner, description)
+	    }
+
+	    if err != nil {
+		   //error page 
+		   r.HTML(501, "error", err)
+		   log.Println(err)
+	    } else {
+		    //redirect page
+		    r.Redirect("/")
+	    }
+    })
+
+
+    //API part
+    m.Get("/api/list", func(r render.Render){
+	    pm := getListofPhysicalMachineAndVirtualMachine (db)
+	    r.JSON(200, pm)
+    })
 
     wsConfig, _ := websocket.NewConfig("ws://127.0.0.1:3000", "http://127.0.0.1:3000")
     ws := websocket.Server{Handler:proxyHandler,
@@ -62,9 +158,10 @@ func main() {
 func proxyHandler(ws *websocket.Conn) {
 	r := ws.Request()
 	values := r.URL.Query()
-	ip, hasIp:= values["ip"]
-	if !hasIp {
-		log.Println("faile to parse vnc address")
+	ip, hasIp := values["ip"]
+
+	if hasIp == false {
+		//log.Println("faile to parse vnc address")
 		return
 	}
 
@@ -109,5 +206,9 @@ func proxyHandler(ws *websocket.Conn) {
 		}
 	}()
 	select {}
-	log.Println("connection finished")
 }
+
+func reportError(r render.Render,err error, userError string) {
+	r.HTML(501,"error", err.Error() + userError)
+}
+

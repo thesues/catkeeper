@@ -83,7 +83,7 @@ func TestGetXml(t *testing.T) {
 	domainList,err := con.ListAllDomains()
 	for _ , i := range domainList {
 		xml,_ := i.GetXMLDesc()
-		fmt.Println(xml)
+		_ = xml
 		i.DomainFree()
 	}
 }

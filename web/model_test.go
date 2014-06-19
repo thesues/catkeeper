@@ -18,10 +18,6 @@ func TestConnectionAndBuildDabase(t *testing.T) {
 	pm := getListofPhysicalMachine(db)
 	// display
 	fmt.Println(pm)
-	// release domains
-	for _, v := range mapVMIDtoVirtualMachine{
-		v.VirDomain.DomainFree()
-	}
 	// release connections
 	for _, c:= range ipaddressConnectionCache {
 		c.CloseConnection()
