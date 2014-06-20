@@ -22,7 +22,7 @@
       <source file='/mnt/vm/sparse.img'/>
       <target dev='vda' bus='virtio'/>
     </disk>
-    <graphics type='vnc' port='5999'>
+    <graphics type='vnc' autoport='yes'>
 	    <listen type='address' address='0.0.0.0'/>
     </graphics>
     <interface type='bridge'>
