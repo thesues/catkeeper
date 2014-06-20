@@ -2,6 +2,7 @@ package libvirt
 import (
 	"testing"
 	"fmt"
+	"io/ioutil"
 )
 
 func TestNewVirConnection(t *testing.T) {
@@ -86,4 +87,73 @@ func TestGetXml(t *testing.T) {
 		_ = xml
 		i.DomainFree()
 	}
+}
+
+func TestStorageVolCreateXML(t *testing.T) {
+	conn, err := NewVirConnection("qemu+ssh://root@147.2.207.233/system")
+	if (err != nil) {
+		t.Error(err)
+		return
+	}
+	defer conn.CloseConnection()
+	xml, err := ioutil.ReadFile("./volume.xml")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	pool,err := conn.StoragePoolLookupByName("default")
+	if err != nil {
+		t.Error(err)
+	}
+	defer pool.Free()
+
+	volume, err := pool.StorageVolCreateXML(string(xml), 1)
+	if err != nil {
+		t.Error(err)
+	}
+	defer volume.Free()
+
+	fmt.Println(volume.GetPath())
+	volume.Delete()
+}
+
+
+func TestCreateAndBootNewDomain(t *testing.T) {
+	conn, err := NewVirConnection("qemu+ssh://root@147.2.207.233/system")
+	if (err != nil) {
+		t.Error(err)
+		return
+	}
+	defer conn.CloseConnection()
+	domainXML, err := ioutil.ReadFile("./domain.xml")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	//Create disk first
+	volumeXML, err := ioutil.ReadFile("./volume.xml")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	pool,err := conn.StoragePoolLookupByName("default")
+	if err != nil {
+		t.Error(err)
+	}
+	defer pool.Free()
+
+	volume, err := pool.StorageVolCreateXML(string(volumeXML), 1)
+	if err != nil {
+		t.Error(err)
+	}
+	defer volume.Free()
+
+	domain, err := conn.CreateAndBootNewDomain(string(domainXML))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer domain.DomainFree()
 }

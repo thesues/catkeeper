@@ -177,6 +177,36 @@ func (c *VirConnection) LookupByName(name string) (VirDomain, error) {
 
 }
 
+
+func (c *VirConnection) CreateAndBootNewDomain(xml string)(VirDomain,error) {
+	cXml := C.CString(xml)
+	defer C.free(unsafe.Pointer(cXml))
+
+	cDomainPtr := C.virDomainDefineXML(c.ptr, cXml)
+	if cDomainPtr == nil {
+		return VirDomain{}, errors.New(GetLastError())
+	}
+
+
+	result := C.virDomainCreate(cDomainPtr)
+	if  result == -1 {
+		return VirDomain{}, errors.New(GetLastError())
+	}
+
+	return VirDomain{ptr:cDomainPtr},nil
+}
+
+
+func (c *VirConnection) StoragePoolLookupByName(name string) (VirStoragePool,error){
+	cName := C.CString(name)
+	defer C.free(unsafe.Pointer(cName))
+	ptr := C.virStoragePoolLookupByName(c.ptr, cName)
+	if ptr == nil {
+		return VirStoragePool{}, errors.New(GetLastError())
+	}
+	return VirStoragePool{ptr:ptr} , nil
+}
+
 /* virtual domain */
 func (d *VirDomain) Create() error {
 	result := C.virDomainCreate(d.ptr)
@@ -261,5 +291,77 @@ func (d *VirDomain) GetXMLDesc() (string, error) {
 	C.free(unsafe.Pointer(result))
 	return xml, nil
 }
+/*
+func (d *VirDomain) MointorRebootEvent(conn VirConnection, ) error {
+
+}
+*/
 
 
+type VirStoragePool struct {
+	ptr C.virStoragePoolPtr
+}
+
+
+
+func (p *VirStoragePool) LookupStorageVolByName(name string) (VirStorageVol, error) {
+	cName := C.CString(name)
+	defer C.free(unsafe.Pointer(cName))
+	ptr := C.virStorageVolLookupByName(p.ptr, cName)
+	if ptr == nil {
+		return VirStorageVol{}, errors.New(GetLastError())
+	}
+	return VirStorageVol{ptr: ptr}, nil
+}
+
+
+func (p *VirStoragePool) Free() error {
+	if result := C.virStoragePoolFree(p.ptr); result != 0 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
+
+func (p *VirStoragePool) StorageVolCreateXML(xmlConfig string, flags uint32) (VirStorageVol, error) {
+	cXml := C.CString(string(xmlConfig))
+	defer C.free(unsafe.Pointer(cXml))
+	ptr := C.virStorageVolCreateXML(p.ptr, cXml, C.uint(flags))
+	if ptr == nil {
+		return VirStorageVol{}, errors.New(GetLastError())
+	}
+	return VirStorageVol{ptr: ptr}, nil
+}
+
+type VirStorageVol struct {
+	ptr C.virStorageVolPtr
+}
+
+
+func (v *VirStorageVol) Free() error {
+	if result := C.virStorageVolFree(v.ptr); result != 0 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
+
+
+func (v *VirStorageVol) GetPath() (string, error) {
+	result := C.virStorageVolGetPath(v.ptr)
+	defer C.free(unsafe.Pointer(result))
+	if result == nil {
+		return "", errors.New(GetLastError())
+	}
+	path := C.GoString(result)
+	return path, nil
+}
+
+
+
+func (v *VirStorageVol) Delete() error {
+	//always pass 0
+	result := C.virStorageVolDelete(v.ptr, 0)
+	if result == -1 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
