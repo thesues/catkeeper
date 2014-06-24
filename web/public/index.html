@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+	 <meta charset="utf-8">
+	 <meta http-equiv="X-UA-Compatible" content="IE=edge">
+	 <meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
+  </head>
+
+  <body style="margin: 20px;">
+  <h1>Machine List</h1>
+  <a href="/create" class="btn btn-warning btn-sm active" role="button">CREATE VIRTUALMACHINE</a>
+  <a href="/add" class="btn btn-primary btn-sm active" role="button">ADD PHYSICALMACHINE</a>
+  <input align="left" type="text" id="vm_filter" value=""></input>
+  <input id="vmwant" type="button" value="Go"></input>
+  <div id="display" class="container">
+  </div>
+
+  <script src="include/LAB.js" type="text/javascript"></script>
+
+  <script id="host-begin" type="text/x-handlebars-template">
+  <h3>{{Name}}({{IpAddress}})  {{Description}}</h3>
+  <table class="table table-hover table-condensed">
+  <thead>
+  <tr class=info> <th>Name</th> <th>Running</th> <th>Owner</th> <th>Description</th> <th>EDIT</th></tr>
+  </thead>
+  <tbody>
+  </script>
+  <script id="vms" type="text/x-handlebars-template">
+  <tr>
+  <td>
+	{{#if Active}}
+		<a href="/vnc_auto.html?path=websockify?ip={{VNCAddress}}:{{VNCPort}}">{{Name}}</a>
+	{{else}}
+		{{Name}}
+	{{/if}}
+  </td>
+  <td>{{Active}}</td>
+  <td>{{Owner}} </td>
+  <td>{{Description}} </td>
+  <td>
+  	<a href="/vm/{{Id}}" class="btn btn-success btn-xs active" role="button">EDIT</a>
+  </td>
+  </tr>
+  </script>
+
+  <script id="host-end" type="text/x-handlebars-template">
+  </tbody>
+  </table>
+  </script>
+  
+  <script type="text/javascript">
+  	function loadData(data)
+	{
+			var doc = document;
+			var div = doc.getElementById("display");
+			var html="";
+			var hostshtml = $("#host-begin").html();
+			var hosttemplate = Handlebars.compile(hostshtml);
+			var vmshtml = $("#vms").html();
+			var vmstemplate = Handlebars.compile(vmshtml);
+			var endhtml = $("#host-end").html();
+			var length = data.length;
+			var vmfilter = doc.getElementById("vm_filter");
+			var regstr = vmfilter.value;
+			if(regstr == "")
+					regstr = ".*";
+			var pattern = new RegExp(vmfilter.value);
+			for(var i=0; i<length; i++)
+			{
+					html += hosttemplate(data[i]);
+					var vms = data[i].VirtualMachines;
+					var vmcount = vms.length;
+					for(var j=0; j<vmcount; j++)
+					{
+							if(pattern.test(vms[j].Name))
+									html += vmstemplate(vms[j]);
+					}
+			}
+			html += endhtml;
+			div.innerHTML = html;
+	}
+
+	function getAllVms()
+	{
+		var response = $.get("api/list");
+		response.done(loadData);
+		response.fail(function(){
+						$("#sets").html("Failed to get vm lists.");
+						})
+	}
+
+  	function init()
+	{
+			getAllVms();
+			$("#vmwant").click(function(){
+							getAllVms();
+							});
+	}
+	$LAB.script("https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js")
+	//.script("//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js")
+	.script("http://builds.handlebarsjs.com.s3.amazonaws.com/handlebars-v1.3.0.js").wait(function(){
+					$(document).ready(init);
+					})
+  </script>
+  </body>
+  </html>

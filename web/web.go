@@ -32,8 +32,7 @@ func main() {
 
 
     m.Get("/", func(r render.Render){
-	    pm := getListofPhysicalMachineAndVirtualMachine(db)
-	    r.HTML(200, "list" , pm)
+	    r.HTML(200, "index" , nil)
     })
 
     m.Get("/create", func(r render.Render) {
