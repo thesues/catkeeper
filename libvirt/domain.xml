@@ -1,6 +1,5 @@
 <domain type='kvm' id='24'>
   <name>cldmzhang_ttestlifecycle2</name>
-  <uuid>6af9b2a7-db85-72b2-62a6-3f8c9c92f614</uuid>
   <memory unit='KiB'>524288</memory>
   <currentMemory unit='KiB'>524288</currentMemory>
   <vcpu placement='static'>4</vcpu>
@@ -9,7 +8,7 @@
   </resource>
   <os>
     <type arch='x86_64' machine='pc-i440fx-1.4'>hvm</type>
-    <boot dev='hd'/>
+    <boot dev='network'/>
   </os>
   <clock offset='utc'/>
   <on_poweroff>destroy</on_poweroff>

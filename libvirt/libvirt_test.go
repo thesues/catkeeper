@@ -3,6 +3,7 @@ import (
 	"testing"
 	"fmt"
 	"io/ioutil"
+	"errors"
 )
 
 func TestNewVirConnection(t *testing.T) {
@@ -68,7 +69,7 @@ func TestActiveDomainList(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		i.DomainFree()
+		i.Free()
 		fmt.Printf(uuidName)
 		fmt.Printf(name)
 	}
@@ -85,7 +86,7 @@ func TestGetXml(t *testing.T) {
 	for _ , i := range domainList {
 		xml,_ := i.GetXMLDesc()
 		_ = xml
-		i.DomainFree()
+		i.Free()
 	}
 }
 
@@ -149,11 +150,107 @@ func TestCreateAndBootNewDomain(t *testing.T) {
 		t.Error(err)
 	}
 	defer volume.Free()
+	defer volume.Delete()
 
 	domain, err := conn.CreateAndBootNewDomain(string(domainXML))
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	defer domain.DomainFree()
+	defer domain.Free()
+	//TODO delete the vi
+	defer domain.Delete()
+	defer domain.Destroy()
+
+}
+
+func TestStreamTransfer(t *testing.T) {
+	conn, err := NewVirConnection("qemu+ssh://root@147.2.207.233/system")
+	if (err != nil) {
+		t.Error(err)
+		return
+	}
+	defer conn.CloseConnection()
+	// Test volume pool
+	// create vol from pool and Upload
+	var pool VirStoragePool
+	pool, err = conn.StoragePoolLookupByName("boot-scratch")
+	if err != nil {
+		// pool not existed
+		// create on pool named "boot-scrath"
+		// TODO
+		fmt.Println("pool not exist")
+		poolXML, _:= ioutil.ReadFile("./pool.xml")
+		pool, err = conn.StoragePoolDefineXML(string(poolXML))
+		if err != nil {
+			t.Error(err)
+			return
+		}
+	} else {
+		//has the pool
+	}
+	//do not want to use pool.Delete
+	//because there might be other volumes are using the storage pool
+	defer pool.Free()
+
+	//is not active, active it
+	if pool.IsActive() == false {
+		if err := pool.Create();err != nil {
+			t.Error(err)
+			return
+		}
+	}
+
+	//create volume
+	dataXML, _:= ioutil.ReadFile("./volume_data.xml")
+	volume, err := pool.StorageVolCreateXML(string(dataXML),0)
+	if err != nil {
+		return
+	}
+	defer volume.Free()
+	defer volume.Delete()
+
+	//display path of volume
+	path,_ := volume.GetPath()
+	fmt.Println("I got " + path)
+
+	stream, err := conn.StreamNew()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer stream.Free()
+
+	//read data file
+	data,_ := ioutil.ReadFile("./data")
+	err = StorageVolUpload(volume, stream, 0, uint64(len(data)))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	//transfter volume
+	fmt.Println("Sending Data...")
+	remain := len(data)
+	sent := 0
+	offset := 0
+	for remain > 0 {
+		sent = stream.Send(data[offset:], remain)
+		if sent < 0 {
+			stream.Abort()
+			t.Error(errors.New("Stream Send return 0"))
+			return
+		}
+		if sent == 0 {
+			break;
+		}
+		remain -= sent
+		offset += sent
+
+	}
+	err = stream.Finish()
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println("Finish Send Data...")
+
 }

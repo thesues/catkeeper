@@ -13,6 +13,7 @@ import (
 	"net"
 	"strconv"
 	"fmt"
+	"os/signal"
 
 )
 
@@ -112,14 +113,14 @@ func main() {
 	    switch submitType {
 	    case "Start":
 		    err = vm.Start()
-		    vm.DomainFree()
+		    vm.Free()
 	    case "Stop":
 		    err = vm.Stop()
 		    //TODO: wait a while
-		    vm.DomainFree()
+		    vm.Free()
 	    case "ForceStop":
 		    err = vm.ForceStop()
-		    vm.DomainFree()
+		    vm.Free()
 	    case "Update":
 		    owner := req.PostForm["Owner"][0]
 		    description := req.PostForm["Description"][0]

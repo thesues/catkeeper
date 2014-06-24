@@ -7,7 +7,7 @@ import (
 	"unsafe"
 )
 
-/*from github.com/alexzorin/libvirt-go*/
+/* part code from github.com/alexzorin/libvirt-go */
 
 /*
 #cgo LDFLAGS: -lvirt -ldl
@@ -24,6 +24,62 @@ type VirConnection struct {
 
 type VirDomain struct {
 	ptr C.virDomainPtr
+}
+
+
+type VirStream struct {
+	ptr C.virStreamPtr
+}
+
+
+func (c *VirConnection) StreamNew() (VirStream,error) {
+	ptr := C.virStreamNew(c.ptr, 0);
+	if ptr == nil {
+		return VirStream{}, errors.New(GetLastError())
+	}
+	return VirStream{ptr:ptr}, nil
+
+}
+
+
+func StorageVolUpload(vol VirStorageVol, s VirStream, offset uint64 , length uint64) error {
+
+	result := C.virStorageVolUpload(vol.ptr, s.ptr, C.ulonglong(offset), C.ulonglong(length), 0)
+	if result < 0 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
+
+func (s *VirStream) Send(data []byte, size int) int {
+	cBytes := C.virStreamSend(s.ptr, (*C.char)(unsafe.Pointer(&data[0])), C.size_t(size))
+	return int(cBytes)
+}
+
+
+func (s *VirStream) Finish() error {
+	result := C.virStreamFinish(s.ptr)
+	if result < 0 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
+
+
+func (s *VirStream) Abort() error {
+	result := C.virStreamAbort(s.ptr)
+	if result < 0 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
+
+func (s *VirStream) Free() error {
+	result := C.virStreamFree(s.ptr)
+	if result < 0 {
+		return errors.New(GetLastError())
+	}
+	return nil
 }
 
 func GetLastError() string {
@@ -216,7 +272,7 @@ func (d *VirDomain) Create() error {
 	return nil
 }
 
-func (d *VirDomain) DomainFree() error {
+func (d *VirDomain) Free() error {
 	result := C.virDomainFree(d.ptr)
 	if result == -1 {
 		return errors.New(GetLastError())
@@ -227,6 +283,14 @@ func (d *VirDomain) DomainFree() error {
 func (d *VirDomain) Destroy() error {
 	result := C.virDomainDestroy(d.ptr)
 	if result == -1 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
+
+func (d *VirDomain) Delete() error {
+	result := C.virDomainUndefine(d.ptr)
+	if result < 0 {
 		return errors.New(GetLastError())
 	}
 	return nil
@@ -291,17 +355,39 @@ func (d *VirDomain) GetXMLDesc() (string, error) {
 	C.free(unsafe.Pointer(result))
 	return xml, nil
 }
-/*
-func (d *VirDomain) MointorRebootEvent(conn VirConnection, ) error {
-
-}
-*/
-
 
 type VirStoragePool struct {
 	ptr C.virStoragePoolPtr
 }
 
+func (c * VirConnection) StoragePoolDefineXML(xml string) (VirStoragePool, error){
+	cXML := C.CString(xml)
+	defer C.free(unsafe.Pointer(cXML))
+	ptr := C.virStoragePoolDefineXML(c.ptr, cXML, 0)
+	if ptr == nil {
+		return VirStoragePool{}, errors.New(GetLastError())
+	}
+	return VirStoragePool{ptr:ptr}, nil
+
+}
+
+
+func (p *VirStoragePool) Create() error {
+	result := C.virStoragePoolCreate(p.ptr, 0)
+	if result < 0 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
+
+
+func (p *VirStoragePool) Free() error {
+	result := C.virStoragePoolFree(p.ptr)
+	if result < 0 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
 
 
 func (p *VirStoragePool) LookupStorageVolByName(name string) (VirStorageVol, error) {
@@ -315,13 +401,6 @@ func (p *VirStoragePool) LookupStorageVolByName(name string) (VirStorageVol, err
 }
 
 
-func (p *VirStoragePool) Free() error {
-	if result := C.virStoragePoolFree(p.ptr); result != 0 {
-		return errors.New(GetLastError())
-	}
-	return nil
-}
-
 func (p *VirStoragePool) StorageVolCreateXML(xmlConfig string, flags uint32) (VirStorageVol, error) {
 	cXml := C.CString(string(xmlConfig))
 	defer C.free(unsafe.Pointer(cXml))
@@ -331,6 +410,30 @@ func (p *VirStoragePool) StorageVolCreateXML(xmlConfig string, flags uint32) (Vi
 	}
 	return VirStorageVol{ptr: ptr}, nil
 }
+
+
+func (p *VirStoragePool) IsActive() bool{
+	result := C.virStoragePoolIsActive(p.ptr)
+	switch result {
+	case -1:
+		return false
+	case 0:
+		return false
+	case 1:
+		return true
+	default:
+		return false
+	}
+}
+/*
+func (p *VirStoragePool) Free() error {
+	result := C.virStoragePoolFree(p.ptr)
+	if result < 0 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
+*/
 
 type VirStorageVol struct {
 	ptr C.virStorageVolPtr
@@ -354,7 +457,6 @@ func (v *VirStorageVol) GetPath() (string, error) {
 	path := C.GoString(result)
 	return path, nil
 }
-
 
 
 func (v *VirStorageVol) Delete() error {
