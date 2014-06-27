@@ -155,6 +155,7 @@ func main() {
 }
 
 func proxyHandler(ws *websocket.Conn) {
+	defer ws.Close()
 	r := ws.Request()
 	values := r.URL.Query()
 	ip, hasIp := values["ip"]
@@ -165,11 +166,10 @@ func proxyHandler(ws *websocket.Conn) {
 	}
 
 	vc, err := net.Dial("tcp", ip[0])
-	defer vc.Close()
-	defer ws.Close()
 	if err != nil {
 		return
 	}
+	defer vc.Close()
 	log.Println("new connection")
 	done := make(chan bool)
 
