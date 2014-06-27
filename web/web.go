@@ -166,24 +166,30 @@ func proxyHandler(ws *websocket.Conn) {
 
 	vc, err := net.Dial("tcp", ip[0])
 	defer vc.Close()
+	defer ws.Close()
 	if err != nil {
 		return
 	}
 	log.Println("new connection")
+	done := make(chan bool)
+
 	go func() {
 		sbuf := make([]byte, 32*1024)
 		dbuf := make([]byte, 32*1024)
 		for {
 			n, e := ws.Read(sbuf)
 			if e != nil {
+				done <- true
 				return
 			}
 			n, e = base64.StdEncoding.Decode(dbuf, sbuf[0:n])
 			if e != nil {
+				done <- true
 				return
 			}
 			n, e = vc.Write(dbuf[0:n])
 			if e != nil {
+				done <- true
 				return
 			}
 		}
@@ -194,17 +200,23 @@ func proxyHandler(ws *websocket.Conn) {
 		for {
 			n, e := vc.Read(sbuf)
 			if e != nil {
+				done <- true
 				return
 			}
 			base64.StdEncoding.Encode(dbuf, sbuf[0:n])
 			n = ((n + 2) / 3) * 4
 			ws.Write(dbuf[0:n])
 			if e != nil {
+				done <- true
 				return
 			}
 		}
 	}()
-	select {}
+	select {
+	case <-done:
+		break
+	}
+	log.Println("finish connection")
 }
 
 func reportError(r render.Render,err error, userError string) {

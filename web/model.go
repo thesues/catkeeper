@@ -233,6 +233,17 @@ func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, err
 		//?How to deal with connection's not alive
 		if ok ,_ := conn.IsAlive();!ok {
 			log.Println("Not alive")
+			conn, err = libvirt.NewVirConnection("qemu+ssh://root@" + HostIpAddress + "/system")
+			if err != nil {
+				cacheMutex.Lock()
+				delete(ipaddressConnectionCache,HostIpAddress)
+				cacheMutex.Unlock()
+				return VirtualMachine{},err
+			}
+			/*TODO Write Lock*/
+			cacheMutex.Lock()
+			ipaddressConnectionCache[HostIpAddress] = conn
+			cacheMutex.Unlock()
 		}
 	}
 
