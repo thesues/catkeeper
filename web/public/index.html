@@ -13,7 +13,6 @@
   <a href="/create" class="btn btn-warning btn-sm active" role="button">CREATE VIRTUALMACHINE</a>
   <a href="/add" class="btn btn-primary btn-sm active" role="button">ADD PHYSICALMACHINE</a>
   <input align="left" type="text" id="vm_filter" value=""></input>
-  <input id="vmwant" type="button" value="Go"></input>
   </div>
   <div id="display" class="container">
   </div>
@@ -22,9 +21,9 @@
 
   <script id="host-begin" type="text/x-handlebars-template">
   <h3>{{Name}}({{IpAddress}})  {{Description}}</h3>
-  <table class="table table-hover table-condensed">
+  <table class="table table-hover table-condensed" width="100%">
   <thead>
-  <tr class=info> <th>Name</th> <th>Running</th> <th>Owner</th> <th>Description</th> <th>EDIT</th></tr>
+  <tr class=info> <th width="30%">Name</th> <th width="10%">Running</th> <th width="20%">Owner</th> <th width="30%">Description</th> <th width="10%">EDIT</th></tr>
   </thead>
   <tbody>
   </script>
@@ -32,7 +31,7 @@
   <tr>
   <td>
 	{{#if Active}}
-		<a href="/vnc_auto.html?title={{Name}}&path=websockify?ip={{VNCAddress}}:{{VNCPort}}">{{Name}}</a>
+		<a href="/vnc_auto.html?title={{Name}}&path=websockify?ip={{VNCAddress}}:{{VNCPort}}" target="_blank">{{Name}}</a>
 	{{else}}
 		{{Name}}
 	{{/if}}
@@ -65,9 +64,9 @@
 			var length = data.length;
 			var vmfilter = doc.getElementById("vm_filter");
 			var regstr = vmfilter.value;
-			if(regstr == "")
+			if(regstr == "" || regstr == "*")
 					regstr = ".*";
-			var pattern = new RegExp(vmfilter.value);
+			var pattern = new RegExp(regstr);
 			for(var i=0; i<length; i++)
 			{
 					html += hosttemplate(data[i]);
@@ -95,9 +94,13 @@
   	function init()
 	{
 			getAllVms();
-			$("#vmwant").click(function(){
-							getAllVms();
-							});
+			$("#vm_filter").keyup(function(e){
+							if(13 == e.keyCode)
+							{
+								getAllVms();
+							}
+						}
+						);
 	}
 	$LAB.script("https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js")
 	//.script("//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js")
