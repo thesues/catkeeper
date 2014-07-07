@@ -75,8 +75,8 @@ func (this *VirtualMachine) ForceStop() error {
 	return err
 }
 
-func (this *VirtualMachine) DomainFree() error {
-	err := this.VirDomain.DomainFree()
+func (this *VirtualMachine) Free() error {
+	err := this.VirDomain.Free()
 	return err
 }
 
@@ -93,6 +93,7 @@ func (this *VirtualMachine) UpdateDatabase(db *sql.DB, owner string, description
 	}
 }
 
+// global variables: do not like global variables
 // cached VirConnection
 //IpAddress => VirConnection
 var ipaddressConnectionCache = make(map[string]libvirt.VirConnection)
@@ -232,6 +233,17 @@ func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, err
 		//?How to deal with connection's not alive
 		if ok ,_ := conn.IsAlive();!ok {
 			log.Println("Not alive")
+			conn, err = libvirt.NewVirConnection("qemu+ssh://root@" + HostIpAddress + "/system")
+			if err != nil {
+				cacheMutex.Lock()
+				delete(ipaddressConnectionCache,HostIpAddress)
+				cacheMutex.Unlock()
+				return VirtualMachine{},err
+			}
+			/*TODO Write Lock*/
+			cacheMutex.Lock()
+			ipaddressConnectionCache[HostIpAddress] = conn
+			cacheMutex.Unlock()
 		}
 	}
 
@@ -340,7 +352,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 						vm.VNCAddress = host.IpAddress
 					}
 					//will not have any operations on vm, virdomain could be freeed
-					virdomain.DomainFree()
+					virdomain.Free()
 					host.VirtualMachines = append(host.VirtualMachines, &vm)
 				}
 				done <- true

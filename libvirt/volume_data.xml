@@ -1,0 +1,8 @@
+<volume type='file'>
+	<name>data</name>
+	<capacity>23</capacity>
+	<allocation>0</allocation>
+	 <target>
+		 <format type='raw'/>
+	 </target>
+</volume>

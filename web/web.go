@@ -111,14 +111,14 @@ func main() {
 	    switch submitType {
 	    case "Start":
 		    err = vm.Start()
-		    vm.DomainFree()
+		    vm.Free()
 	    case "Stop":
 		    err = vm.Stop()
 		    //TODO: wait a while
-		    vm.DomainFree()
+		    vm.Free()
 	    case "ForceStop":
 		    err = vm.ForceStop()
-		    vm.DomainFree()
+		    vm.Free()
 	    case "Update":
 		    owner := req.PostForm["Owner"][0]
 		    description := req.PostForm["Description"][0]
@@ -155,6 +155,7 @@ func main() {
 }
 
 func proxyHandler(ws *websocket.Conn) {
+	defer ws.Close()
 	r := ws.Request()
 	values := r.URL.Query()
 	ip, hasIp := values["ip"]
@@ -165,25 +166,30 @@ func proxyHandler(ws *websocket.Conn) {
 	}
 
 	vc, err := net.Dial("tcp", ip[0])
-	defer vc.Close()
 	if err != nil {
 		return
 	}
+	defer vc.Close()
 	log.Println("new connection")
+	done := make(chan bool)
+
 	go func() {
 		sbuf := make([]byte, 32*1024)
 		dbuf := make([]byte, 32*1024)
 		for {
 			n, e := ws.Read(sbuf)
 			if e != nil {
+				done <- true
 				return
 			}
 			n, e = base64.StdEncoding.Decode(dbuf, sbuf[0:n])
 			if e != nil {
+				done <- true
 				return
 			}
 			n, e = vc.Write(dbuf[0:n])
 			if e != nil {
+				done <- true
 				return
 			}
 		}
@@ -194,17 +200,23 @@ func proxyHandler(ws *websocket.Conn) {
 		for {
 			n, e := vc.Read(sbuf)
 			if e != nil {
+				done <- true
 				return
 			}
 			base64.StdEncoding.Encode(dbuf, sbuf[0:n])
 			n = ((n + 2) / 3) * 4
 			ws.Write(dbuf[0:n])
 			if e != nil {
+				done <- true
 				return
 			}
 		}
 	}()
-	select {}
+	select {
+	case <-done:
+		break
+	}
+	log.Println("finish connection")
 }
 
 func reportError(r render.Render,err error, userError string) {
