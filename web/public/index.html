@@ -8,11 +8,12 @@
   </head>
 
   <body style="margin: 20px;">
+  <div class="container">
   <h1>Machine List</h1>
   <a href="/create" class="btn btn-warning btn-sm active" role="button">CREATE VIRTUALMACHINE</a>
   <a href="/add" class="btn btn-primary btn-sm active" role="button">ADD PHYSICALMACHINE</a>
   <input align="left" type="text" id="vm_filter" value=""></input>
-  <input id="vmwant" type="button" value="Go"></input>
+  </div>
   <div id="display" class="container">
   </div>
 
@@ -30,7 +31,7 @@
   <tr>
   <td>
 	{{#if Active}}
-		<a href="/vnc_auto.html?path=websockify?ip={{VNCAddress}}:{{VNCPort}}">{{Name}}</a>
+		<a href="/vnc_auto.html?title={{Name}}&path=websockify?ip={{VNCAddress}}:{{VNCPort}}" target="_blank">{{Name}}</a>
 	{{else}}
 		{{Name}}
 	{{/if}}
@@ -63,9 +64,9 @@
 			var length = data.length;
 			var vmfilter = doc.getElementById("vm_filter");
 			var regstr = vmfilter.value;
-			if(regstr == "")
+			if(regstr == "" || regstr == "*")
 					regstr = ".*";
-			var pattern = new RegExp(vmfilter.value);
+			var pattern = new RegExp(regstr);
 			for(var i=0; i<length; i++)
 			{
 					html += hosttemplate(data[i]);
@@ -93,9 +94,13 @@
   	function init()
 	{
 			getAllVms();
-			$("#vmwant").click(function(){
-							getAllVms();
-							});
+			$("#vm_filter").keyup(function(e){
+							if(13 == e.keyCode)
+							{
+								getAllVms();
+							}
+						}
+						);
 	}
 	$LAB.script("https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js")
 	//.script("//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js")
