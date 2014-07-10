@@ -51,8 +51,11 @@
   </script>
   
   <script type="text/javascript">
-  	function loadData(data)
+  	var gall = null;
+  	function display(data)
 	{
+			if(null == data)
+					return;
 			var doc = document;
 			var div = doc.getElementById("display");
 			var html="";
@@ -82,22 +85,35 @@
 			div.innerHTML = html;
 	}
 
-	function getAllVms()
+	function setgall(data)
 	{
-		var response = $.get("api/list");
-		response.done(loadData);
-		response.fail(function(){
+			gall = data;
+			display(data);
+	}
+
+	function query()
+	{
+	    if(null == gall)
+		{
+				var response = $.get("api/list");
+				response.done(setgall);
+				response.fail(function(){
 						$("#sets").html("Failed to get vm lists.");
-						})
+						});
+		}
+		else
+		{
+				display(gall);
+		}
 	}
 
   	function init()
 	{
-			getAllVms();
+			query();
 			$("#vm_filter").keyup(function(e){
 							if(13 == e.keyCode)
 							{
-								getAllVms();
+								query();
 							}
 						}
 						);
@@ -106,7 +122,7 @@
 	//.script("//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js")
 	.script("http://builds.handlebarsjs.com.s3.amazonaws.com/handlebars-v1.3.0.js").wait(function(){
 					$(document).ready(init);
-					})
+					});
   </script>
   </body>
   </html>
