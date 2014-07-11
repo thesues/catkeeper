@@ -67,18 +67,59 @@
 			var length = data.length;
 			var vmfilter = doc.getElementById("vm_filter");
 			var regstr = vmfilter.value;
-			if(regstr == "" || regstr == "*")
+			
+			if("" == regstr || "*" == regstr){
 					regstr = ".*";
-			var pattern = new RegExp(regstr);
+			}
+
+			var regarray = regstr.split("/");
+			var regnum = regarray.length;
+			var reghost = "";
+			var regvmname = "";
+			var regvmuser = "";
+			switch(regnum)
+			{
+					case 1:
+							regvmname = regstr;
+							break;
+					case 2:
+							regvmname=regarray[0];
+							regvmuser=regarray[1];
+							break;
+					case 3:
+							reghost = regarray[0];
+							regvmname = regarray[1];
+							regvmuser = regarray[2];
+							break;
+					default:
+							break;
+			};
+		
+			if( "" == reghost ){
+					reghost = ".*";
+			}
+
+			if( "" == regvmuser ){
+					regvmuser = ".*";
+			}
+
+			var patt_host = new RegExp(reghost);
+			var patt_vm_name = new RegExp(regvmname);
+			var patt_vm_user = new RegExp(regvmuser);
 			for(var i=0; i<length; i++)
 			{
+					if( ! patt_host.test(data[i].Name) )
+							continue;
 					html += hosttemplate(data[i]);
 					var vms = data[i].VirtualMachines;
 					var vmcount = vms.length;
 					for(var j=0; j<vmcount; j++)
 					{
-							if(pattern.test(vms[j].Name))
-									html += vmstemplate(vms[j]);
+							if( ! patt_vm_name.test(vms[j].Name) )
+									continue;
+							if( ! patt_vm_user.test(vms[j].Owner) )
+									continue;
+							html += vmstemplate(vms[j]);
 					}
 					html += endhtml;
 			}
