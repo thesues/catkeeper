@@ -15,7 +15,7 @@ func TestConnectionAndBuildDabase(t *testing.T) {
 	}
 	defer db.Close()
 
-	pm := getListofPhysicalMachine(db)
+	pm := getListofPhysicalMachineAndVirtualMachine(db)
 	// display
 	fmt.Println(pm)
 	// release connections
