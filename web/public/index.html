@@ -68,10 +68,6 @@
 			var vmfilter = doc.getElementById("vm_filter");
 			var regstr = vmfilter.value;
 			
-			if("" == regstr || "*" == regstr){
-					regstr = ".*";
-			}
-
 			var regarray = regstr.split("/");
 			var regnum = regarray.length;
 			var reghost = "";
@@ -95,11 +91,15 @@
 							break;
 			};
 		
-			if( "" == reghost ){
+			if( "" == reghost || "*" == reghost){
 					reghost = ".*";
 			}
 
-			if( "" == regvmuser ){
+			if( "" == regvmname || "*" == regvmname){
+					regvmname = ".*";
+			}
+
+			if( "" == regvmuser || "*" == regvmuser ){
 					regvmuser = ".*";
 			}
 
