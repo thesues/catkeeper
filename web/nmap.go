@@ -41,7 +41,7 @@ func CheckNmapVersion() (int, error){
 
 }
 
-func Nmap(args []string, p Parser) (map[string][]string, error) {
+func nmap(args []string, p Parser) (map[string][]string, error) {
 	cmd := exec.Command("nmap", args...)
 	out, err := cmd.Output()
 	if err != nil {
@@ -51,6 +51,24 @@ func Nmap(args []string, p Parser) (map[string][]string, error) {
 	return p(string(out)), nil
 }
 
+func Nmap(region string) (map[string][]string,error) {
+	version, err := CheckNmapVersion()
+	var o map[string][]string
+	var args []string
+
+	switch version {
+	case -1:
+		return nil,err
+	case 4:
+		args = []string{"-n", "-sP", region}
+		o,err = nmap(args, ParseNmapOutput475)
+	case 6:
+		args := []string{"-sn", "-n", region}
+		o,err = nmap(args, ParseNmapOutput640)
+	}
+	return o,err
+
+}
 
 func ParseNmapOutput475(lines string) map[string][]string{
 	var ip string  = ""
