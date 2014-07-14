@@ -339,6 +339,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 	}
 
 
+
 	/* all the PhysicalMachines are ready, VirConnection was connected now */
 	/* receive data from VirConnections */
 
@@ -370,6 +371,6 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 
 func checkErr(err error, msg string) {
 	if err != nil {
-		log.Fatalln(msg, err)
+		log.Print(msg, err)
 	}
 }
