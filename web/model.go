@@ -302,9 +302,10 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 			go func(host *PhysicalMachine){
 				conn, err := libvirt.NewVirConnection("qemu+ssh://root@" + host.IpAddress + "/system")
 				if err != nil {
-					checkErr(err,"Can not connect to remove libvirt")
+					checkErr(err,"Can not connect to libvirt")
 					host.Existing = false
 					connChan <- connResult{host:host,existing:false}
+					return
 				}
 				connChan <- connResult{host:host,conn:conn,existing:true}
 			}(host)
