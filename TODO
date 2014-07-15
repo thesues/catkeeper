@@ -1,0 +1,8 @@
+1. use nmap to detect ip address
+   1.1 add new table (VM->MAC)
+   1.2 add new table (MAC->IP)
+   1.3 add struct ip_pair(MAC,IP) to VirtualMachine
+2. use nmap to scan and update ip information
+3. write a thread-safe map
+4. there must be some virtual machined recored in database but not existed any more.
+   find a way to clean them
