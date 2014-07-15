@@ -219,7 +219,9 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, error) {
 	var conn libvirt.VirConnection
 	var err error
+	cacheMutex.Lock()
 	conn, ok := ipaddressConnectionCache[HostIpAddress]
+	cacheMutex.UnLock()
 	if ok == false {
 		conn, err = libvirt.NewVirConnection("qemu+ssh://root@" + HostIpAddress + "/system")
 		if err != nil {
@@ -296,7 +298,9 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 	var numGoroutines = 0
 
 	for _, host := range(hosts) {
+		cacheMutex.Lock()
 		conn, ok := ipaddressConnectionCache[host.IpAddress]
+		cacheMutex.UnLock()
 		if ok == false {
 			numGoroutines ++
 			go func(host *PhysicalMachine){
@@ -318,7 +322,9 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 			/* existing a conn which is dead */
 			} else {
 				host.Existing = false
+				cacheMutex.Lock()
 				delete(ipaddressConnectionCache, host.IpAddress)
+				cacheMutex.UnLock()
 				/* TODO ?if close the connectin */
 				conn.CloseConnection()
 			}
