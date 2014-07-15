@@ -234,7 +234,7 @@ func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, err
 	} else {
 		//?How to deal with connection's not alive
 		if ok ,_ := conn.IsAlive();!ok {
-			log.Println("Not alive")
+			log.Printf("remote %s is not alive", HostIpAddress)
 			conn, err = libvirt.NewVirConnection("qemu+ssh://root@" + HostIpAddress + "/system")
 			if err != nil {
 				cacheMutex.Lock()
@@ -321,6 +321,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 				numLiveHost ++
 			/* existing a conn which is dead */
 			} else {
+				log.Printf("remove %s is not alive", host.IpAddress)
 				host.Existing = false
 				cacheMutex.Lock()
 				delete(ipaddressConnectionCache, host.IpAddress)
