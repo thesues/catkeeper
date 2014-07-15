@@ -221,7 +221,7 @@ func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, err
 	var err error
 	cacheMutex.Lock()
 	conn, ok := ipaddressConnectionCache[HostIpAddress]
-	cacheMutex.UnLock()
+	cacheMutex.Unlock()
 	if ok == false {
 		conn, err = libvirt.NewVirConnection("qemu+ssh://root@" + HostIpAddress + "/system")
 		if err != nil {
@@ -300,7 +300,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 	for _, host := range(hosts) {
 		cacheMutex.Lock()
 		conn, ok := ipaddressConnectionCache[host.IpAddress]
-		cacheMutex.UnLock()
+		cacheMutex.Unlock()
 		if ok == false {
 			numGoroutines ++
 			go func(host *PhysicalMachine){
@@ -324,7 +324,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 				host.Existing = false
 				cacheMutex.Lock()
 				delete(ipaddressConnectionCache, host.IpAddress)
-				cacheMutex.UnLock()
+				cacheMutex.Unlock()
 				/* TODO ?if close the connectin */
 				conn.CloseConnection()
 			}
