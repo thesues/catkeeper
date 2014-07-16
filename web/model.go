@@ -201,7 +201,10 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 					vm.Id = Id
 					vm.Owner = Owner
 					vm.Description = Description
-					/* find the cached IP address to refresh MACMapping */
+					/* find the cached IP address to refresh MACMapping if vm is active*/
+					if !vm.Active {
+						continue
+					}
 					for k,_ := range vm.MACMapping {
 						ip := ""
 						row := db.QueryRow("select IP from macipmappingcache where MAC = ?",k)
