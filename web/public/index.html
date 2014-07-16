@@ -108,10 +108,14 @@
 			var patt_vm_user = new RegExp(regvmuser);
 			for(var i=0; i<length; i++)
 			{
-					if( ! patt_host.test(data[i].Name) )
+					if( ! patt_host.test(data[i].Name) || !data[i].Existing )
 							continue;
 					html += hosttemplate(data[i]);
 					var vms = data[i].VirtualMachines;
+					
+					if( null == vms )
+							continue;
+
 					var vmcount = vms.length;
 					for(var j=0; j<vmcount; j++)
 					{
