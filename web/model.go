@@ -209,7 +209,6 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 						ip := ""
 						row := db.QueryRow("select IP from macipmappingcache where MAC = ?",k)
 						if err := row.Scan(&ip);err != nil {
-							checkErr(err, "failed to find ip address from our database")
 							continue
 						}
 						vm.MACMapping[k] = ip
