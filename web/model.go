@@ -423,9 +423,22 @@ func RescanIPAddress(db *sql.DB) {
 			if host.Existing {
 				for _, vm := range host.VirtualMachines {
 					for mac,_ := range vm.MACMapping {
+						ip := ""
 						_, ok := mapping[mac]
 						if ok {
-							db.Exec("update macipmappingcache set IP = ? where MAC = ?", mapping[mac], mac)
+							err := db.QueryRow("select IP from  macipmappingcache where MAC = ?", mac).Scan(&ip)
+							switch {
+								case err ==  sql.ErrNoRows:
+									/*insert*/
+									db.Exec("insert into macipmappingcache(IP, MAC) values(?,?)", mapping[mac], mac)
+								case err != nil:
+									checkErr(err,"failed to select on macipmappingcache")
+								default:
+									if ip != mapping[mac] {
+										db.Exec("udpate macipmappingcache set IP = ? wheree MAC = ?",mapping[mac], mac)
+									}
+
+							}
 						}
 					}
 				}
