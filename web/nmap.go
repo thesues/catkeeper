@@ -83,7 +83,7 @@ func ParseNmapOutput475(lines string) map[string]string{
 			ip = obj[1]
 		} else if ip != ""  {
 			if obj :=hwPattern.FindStringSubmatch(line); len(obj) > 1 {
-				HwIpDict[obj[1]] = ip
+				HwIpDict[strings.ToLower(obj[1])] = ip
 				ip = ""
 			}
 		}
@@ -106,7 +106,7 @@ func ParseNmapOutput640(lines string) map[string]string {
 			ip = obj[1]
 		} else if ip != ""  {
 			if obj :=hwPattern.FindStringSubmatch(line); len(obj) > 1 {
-				HwIpDict[obj[1]] = ip
+				HwIpDict[strings.ToLower(obj[1])] = ip
 				ip = ""
 			}
 		}
