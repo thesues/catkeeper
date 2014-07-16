@@ -42,6 +42,7 @@ func CheckNmapVersion() (int, error){
 
 }
 
+/* return MAC=>IP */
 func nmap(args []string, p Parser) (map[string][]string, error) {
 	cmd := exec.Command("nmap", args...)
 	out, err := cmd.Output()

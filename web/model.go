@@ -7,7 +7,6 @@ import (
 	"encoding/xml"
 
 	"errors"
-	"sync"
 	"dmzhang/catkeeper/libvirt"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -49,7 +48,11 @@ type VirtualMachine struct {
 	VNCAddress string
 	VNCPort    string
 	VirDomain libvirt.VirDomain
+
+	/*mapping MAC=>IP*/
+	MACMapping map[string]string
 }
+
 
 func (this *VirtualMachine) String() string {
 	return fmt.Sprintf("%s %s:%s", this.Name, this.VNCAddress, this.VNCPort)
@@ -96,11 +99,12 @@ func (this *VirtualMachine) UpdateDatabase(db *sql.DB, owner string, description
 // global variables: do not like global variables
 // cached VirConnection
 //IpAddress => VirConnection
-var ipaddressConnectionCache = make(map[string]libvirt.VirConnection)
+//var ipaddressConnectionCache = make(map[string]libvirt.VirConnection)
 
 // cacheMutex is used to protect the ipaddressConnectionCache map from multiple users 
-var cacheMutex = &sync.Mutex{}
+//var cacheMutex = &sync.Mutex{}
 
+var ipaddressConnectionCache = NewSafeMap()
 /* map vm ID(created in database) to VirtualMachine*/
 // not used any more
 //var mapVMIDtoVirtualMachine map[int]*VirtualMachine
@@ -184,11 +188,29 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 					vm.Id = Id
 					vm.Owner = Owner
 					vm.Description = Description
+					/* insert into vm-mac-mapping */
+					/* used to clean unused MAC in the future */
+					for k,v := range vm.MACMapping {
+						if _,err := db.Exec("insert into vmmacmapping(VmId, MAC) values (?,?)", k,v); err != nil {
+							checkErr(err,"failed to insert vmmacmapping")
+						}
+					}
+
 				} else {
-					/*get registered information of vm*/
+					/* get registered information of vm */
 					vm.Id = Id
 					vm.Owner = Owner
 					vm.Description = Description
+					/* find the cached IP address to refresh MACMapping */
+					for k,_ := range vm.MACMapping {
+						ip := ""
+						row := db.QueryRow("select IP from macipmappingcache where MAC = ?",k)
+						if err := row.Scan(&ip);err != nil {
+							checkErr(err, "failed to find ip address  from our database")
+							continue
+						}
+						vm.MACMapping[k] = ip
+					}
 				}
 			}
 		}
@@ -219,33 +241,25 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, error) {
 	var conn libvirt.VirConnection
 	var err error
-	cacheMutex.Lock()
-	conn, ok := ipaddressConnectionCache[HostIpAddress]
-	cacheMutex.Unlock()
+	ok := ipaddressConnectionCache.Check(HostIpAddress)
 	if ok == false {
 		conn, err = libvirt.NewVirConnection("qemu+ssh://root@" + HostIpAddress + "/system")
 		if err != nil {
 			return VirtualMachine{},err
 		}
-		/*TODO Write Lock*/
-		cacheMutex.Lock()
-		ipaddressConnectionCache[HostIpAddress] = conn
-		cacheMutex.Unlock()
+		ipaddressConnectionCache.Set(HostIpAddress, conn)
 	} else {
 		//?How to deal with connection's not alive
+		conn = ipaddressConnectionCache.Get(HostIpAddress).(libvirt.VirConnection)
 		if ok ,_ := conn.IsAlive();!ok {
 			log.Printf("remote %s is not alive", HostIpAddress)
 			conn, err = libvirt.NewVirConnection("qemu+ssh://root@" + HostIpAddress + "/system")
 			if err != nil {
-				cacheMutex.Lock()
-				delete(ipaddressConnectionCache,HostIpAddress)
-				cacheMutex.Unlock()
+				ipaddressConnectionCache.Delete(HostIpAddress)
 				return VirtualMachine{},err
 			}
 			/*TODO Write Lock*/
-			cacheMutex.Lock()
-			ipaddressConnectionCache[HostIpAddress] = conn
-			cacheMutex.Unlock()
+			ipaddressConnectionCache.Set(HostIpAddress, conn)
 		}
 	}
 
@@ -260,17 +274,29 @@ func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, err
 
 //TODO: in the futhure, use vm := VirtualMachine{};fillvmData(domain,vm)
 func fillVmData(domain libvirt.VirDomain) VirtualMachine {
+
+	type MACAttr struct {
+		Address string `xml:"address,attr"`
+	}
+	type BridgeInterface struct {
+		MAC MACAttr`xml:"mac"`
+		Type string `xml:"type,attr"`
+
+	}
 	type VNCinfo struct {
 		VNCPort string `xml:"port,attr"`
 	}
 	type Devices struct {
 		Graphics VNCinfo `xml:"graphics"`
+		Interface []BridgeInterface `xml:"interface""`
 	}
+
 	type xmlParseResult struct {
 		Name string    `xml:"name"`
 		UUID string    `xml:"uuid"`
 		Devices  Devices `xml:"devices"`
 	}
+
 	v := xmlParseResult{}
 	xmlData, _ := domain.GetXMLDesc()
 	xml.Unmarshal([]byte(xmlData), &v)
@@ -281,12 +307,21 @@ func fillVmData(domain libvirt.VirDomain) VirtualMachine {
 		active = true
 		vncPort =  v.Devices.Graphics.VNCPort
 	}
-	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain}
+
+	/* fill MAC Address */
+	macMapping := make(map[string]string)
+	for _, i := range v.Devices.Interface {
+		if i.Type == "bridge" {
+			macMapping[i.MAC.Address] = "not detected"
+		}
+	}
+	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain, MACMapping:macMapping}
 }
 
 func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 	/* get libvirt connections */
 	numLiveHost := 0
+	var conn libvirt.VirConnection
 
 	/* use this type in chanStruct */
 	type connResult struct {
@@ -298,9 +333,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 	var numGoroutines = 0
 
 	for _, host := range(hosts) {
-		cacheMutex.Lock()
-		conn, ok := ipaddressConnectionCache[host.IpAddress]
-		cacheMutex.Unlock()
+		ok := ipaddressConnectionCache.Check(host.IpAddress)
 		if ok == false {
 			numGoroutines ++
 			go func(host *PhysicalMachine){
@@ -315,6 +348,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 			}(host)
 		} else  {
 			/* existing a conn which is alive */
+			conn = ipaddressConnectionCache.Get(host.IpAddress).(libvirt.VirConnection)
 			if ok ,_ := conn.IsAlive();ok {
 				host.VirConn =  conn
 				host.Existing = true
@@ -323,9 +357,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 			} else {
 				log.Printf("remove %s is not alive", host.IpAddress)
 				host.Existing = false
-				cacheMutex.Lock()
-				delete(ipaddressConnectionCache, host.IpAddress)
-				cacheMutex.Unlock()
+				ipaddressConnectionCache.Delete(host.IpAddress)
 				/* TODO ?if close the connectin */
 				conn.CloseConnection()
 			}
@@ -338,9 +370,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 			r.host.VirConn = r.conn
 			r.host.Existing = true
 			/*Write Lock*/
-			cacheMutex.Lock()
-			ipaddressConnectionCache[r.host.IpAddress] = r.conn
-			cacheMutex.Unlock()
+			ipaddressConnectionCache.Set(r.host.IpAddress, r.conn)
 			numLiveHost ++
 		}
 	}
@@ -375,6 +405,36 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 	}
 
 }
+
+func RescanIPAddress(db *sql.DB) {
+
+	hosts := getListofPhysicalMachineAndVirtualMachine(db)
+
+	for _, subnet := range LocalIPs() {
+		/* scan */
+		mapping,err := Nmap(subnet)
+		if err != nil {
+			checkErr(err,"nmap failed")
+			continue
+		}
+
+		/* match and insert into database */
+		for _, host := range hosts {
+			if host.Existing {
+				for _, vm := range host.VirtualMachines {
+					for mac,_ := range vm.MACMapping {
+						_, ok := mapping[mac]
+						if ok {
+							db.Exec("update macipmappingcache set IP = ? where MAC = ?", mapping[mac], mac)
+						}
+					}
+				}
+			}
+		}
+	}
+
+}
+
 
 func checkErr(err error, msg string) {
 	if err != nil {

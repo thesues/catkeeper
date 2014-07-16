@@ -16,6 +16,7 @@ import (
 
 )
 
+//TODO move all sql to model.go
 func main() {
     /* init database */
     db, err := sql.Open("sqlite3", "/tmp/post_db.bin")
@@ -25,6 +26,7 @@ func main() {
     }
     defer db.Close()
 
+    scanning := false
 
     m := martini.Classic()
     m.Use(render.Renderer())
@@ -98,8 +100,17 @@ func main() {
     })
 
 
-    m.Get("/create", func(r render.Render, req *http.Request) {
-	    r.Redirect("http://www.baidu.com", 200)
+
+    m.Post("/rescan", func(req *http.Request) {
+	    if !scanning {
+		    go func() {
+			    scanning = true
+			    log.Println("start to rescan")
+			    RescanIPAddress(db)
+			    scanning = false
+
+		    }()
+	    }
     })
 
     m.Post("/vm/(?P<id>[0-9]+)", func(r render.Render, params martini.Params, req *http.Request) {
@@ -148,6 +159,7 @@ func main() {
 			    ws.Protocol = []string{"base64"}
 			    return nil
     }}
+
 
     m.Get("/websockify", ws.ServeHTTP)
 
