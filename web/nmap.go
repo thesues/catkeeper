@@ -10,7 +10,7 @@ import ("os"
 )
 
 
-type Parser func (string) map[string][]string
+type Parser func (string) map[string]string
 
 
 func CheckNmapVersion() (int, error){
@@ -43,7 +43,7 @@ func CheckNmapVersion() (int, error){
 }
 
 /* return MAC=>IP */
-func nmap(args []string, p Parser) (map[string][]string, error) {
+func nmap(args []string, p Parser) (map[string]string, error) {
 	cmd := exec.Command("nmap", args...)
 	out, err := cmd.Output()
 	if err != nil {
@@ -53,9 +53,9 @@ func nmap(args []string, p Parser) (map[string][]string, error) {
 	return p(string(out)), nil
 }
 
-func Nmap(region string) (map[string][]string,error) {
+func Nmap(region string) (map[string]string,error) {
 	version, err := CheckNmapVersion()
-	var o map[string][]string
+	var o map[string]string
 	var args []string
 
 	switch version {
@@ -72,9 +72,9 @@ func Nmap(region string) (map[string][]string,error) {
 
 }
 
-func ParseNmapOutput475(lines string) map[string][]string{
+func ParseNmapOutput475(lines string) map[string]string{
 	var ip string  = ""
-	HwIpDict := make(map[string][]string)
+	HwIpDict := make(map[string]string)
 	ipPattern := regexp.MustCompile(`Host ([0-9.]+) appears to be up`)
 	hwPattern := regexp.MustCompile(`MAC Address: ([0-9A-Z:]+) \(QEMU Virtual NIC\)`)
 
@@ -83,7 +83,7 @@ func ParseNmapOutput475(lines string) map[string][]string{
 			ip = obj[1]
 		} else if ip != ""  {
 			if obj :=hwPattern.FindStringSubmatch(line); len(obj) > 1 {
-				HwIpDict[obj[1]] = append(HwIpDict[obj[1]], ip)
+				HwIpDict[obj[1]] = ip
 				ip = ""
 			}
 		}
@@ -96,9 +96,9 @@ Nmap scan report for 147.2.212.57
 Host is up (0.00077s latency).
 MAC Address: 00:1E:C9:47:63:DF (Dell)
 */
-func ParseNmapOutput640(lines string) map[string][]string {
+func ParseNmapOutput640(lines string) map[string]string {
 	var ip string = ""
-	HwIpDict := make(map[string][]string)
+	HwIpDict := make(map[string]string)
 	ipPattern := regexp.MustCompile(`Nmap scan report for ([0-9.]+)`)
 	hwPattern := regexp.MustCompile(`MAC Address: ([0-9A-Z:]+).*`)
 	for _,line := range strings.Split(lines, "\n") {
@@ -106,7 +106,7 @@ func ParseNmapOutput640(lines string) map[string][]string {
 			ip = obj[1]
 		} else if ip != ""  {
 			if obj :=hwPattern.FindStringSubmatch(line); len(obj) > 1 {
-				HwIpDict[obj[1]] = append(HwIpDict[obj[1]], ip)
+				HwIpDict[obj[1]] = ip
 				ip = ""
 			}
 		}
