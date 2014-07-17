@@ -13,6 +13,8 @@ import (
 	"net"
 	"strconv"
 	"fmt"
+	"time"
+	"sync/atomic"
 
 )
 
@@ -26,7 +28,7 @@ func main() {
     }
     defer db.Close()
 
-    scanning := false
+    var scanning int32 = 0
 
     m := martini.Classic()
     m.Use(render.Renderer())
@@ -102,12 +104,11 @@ func main() {
 
 
     m.Post("/rescan", func(req *http.Request) {
-	    if !scanning {
+	    if atomic.LoadInt32(&scanning) == 0{
 		    go func() {
-			    scanning = true
-			    log.Println("start to rescan")
+			    atomic.StoreInt32(&scanning, 1)
 			    RescanIPAddress(db)
-			    scanning = false
+			    atomic.StoreInt32(&scanning, 0)
 
 		    }()
 	    }
@@ -162,6 +163,19 @@ func main() {
 
 
     m.Get("/websockify", ws.ServeHTTP)
+
+    go func(){
+	    for {
+		    time.Sleep(time.Hour * 6)
+		    if atomic.LoadInt32(&scanning) == 0{
+			    log.Println("start planed rescan IP address")
+			    atomic.StoreInt32(&scanning, 1)
+			    RescanIPAddress(db)
+			    atomic.StoreInt32(&scanning, 0)
+		    }
+	    }
+
+    }()
 
     m.Run()
 }
