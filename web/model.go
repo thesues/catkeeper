@@ -34,6 +34,10 @@ func (p *PhysicalMachine) String() string{
 	return result
 }
 
+type SubNet struct {
+	MAC string
+	IP string
+}
 type VirtualMachine struct {
 	/* database */
 	Id          int
@@ -50,7 +54,7 @@ type VirtualMachine struct {
 	VirDomain libvirt.VirDomain
 
 	/*mapping MAC=>IP*/
-	MACMapping map[string]string
+	MACMapping []SubNet
 }
 
 
@@ -190,8 +194,8 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 					vm.Description = Description
 					/* insert into vm-mac-mapping */
 					/* used to clean unused MAC in the future */
-					for k,v := range vm.MACMapping {
-						if _,err := db.Exec("insert into vmmacmapping(VmId, MAC) values (?,?)", k,v); err != nil {
+					for _ , subnet := range vm.MACMapping {
+						if _,err := db.Exec("insert into vmmacmapping(VmId, MAC) values (?,?)", Id,subnet.MAC ); err != nil {
 							checkErr(err,"failed to insert vmmacmapping")
 						}
 					}
@@ -205,13 +209,13 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 					if !vm.Active {
 						continue
 					}
-					for k,_ := range vm.MACMapping {
+					for i, subnet := range vm.MACMapping {
 						ip := ""
-						row := db.QueryRow("select IP from macipmappingcache where MAC = ?",k)
+						row := db.QueryRow("select IP from macipmappingcache where MAC = ?",subnet.MAC)
 						if err := row.Scan(&ip);err != nil {
 							continue
 						}
-						vm.MACMapping[k] = ip
+						vm.MACMapping[i].IP = ip
 					}
 				}
 			}
@@ -311,10 +315,10 @@ func fillVmData(domain libvirt.VirDomain) VirtualMachine {
 	}
 
 	/* fill MAC Address */
-	macMapping := make(map[string]string)
+	macMapping := make([]SubNet,0)
 	for _, i := range v.Devices.Interface {
 		if i.Type == "bridge" {
-			macMapping[i.MAC.Address] = "not detected"
+			macMapping = append(macMapping, SubNet{MAC:i.MAC.Address, IP:"not detected"})
 		}
 	}
 	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain, MACMapping:macMapping}
@@ -412,9 +416,9 @@ func RescanIPAddress(db *sql.DB) {
 
 	hosts := getListofPhysicalMachineAndVirtualMachine(db)
 
-	for _, subnet := range LocalIPs() {
+	for _, myIP:= range LocalIPs() {
 		/* scan */
-		mapping,err := Nmap(subnet)
+		mapping,err := Nmap(myIP)
 		if err != nil {
 			checkErr(err,"nmap failed")
 			continue
@@ -424,20 +428,20 @@ func RescanIPAddress(db *sql.DB) {
 		for _, host := range hosts {
 			if host.Existing {
 				for _, vm := range host.VirtualMachines {
-					for mac,_ := range vm.MACMapping {
+					for _ ,subnet := range vm.MACMapping {
 						ip := ""
-						_, ok := mapping[mac]
+						_, ok := mapping[subnet.MAC]
 						if ok {
-							err := db.QueryRow("select IP from  macipmappingcache where MAC = ?", mac).Scan(&ip)
+							err := db.QueryRow("select IP from  macipmappingcache where MAC = ?", subnet.MAC).Scan(&ip)
 							switch {
 								case err ==  sql.ErrNoRows:
 									/*insert*/
-									db.Exec("insert into macipmappingcache(IP, MAC) values(?,?)", mapping[mac], mac)
+									db.Exec("insert into macipmappingcache(IP, MAC) values(?,?)", mapping[subnet.MAC], subnet.MAC)
 								case err != nil:
 									checkErr(err,"failed to select on macipmappingcache")
 								default:
-									if ip != mapping[mac] {
-										db.Exec("udpate macipmappingcache set IP = ? wheree MAC = ?",mapping[mac], mac)
+									if ip != mapping[subnet.MAC] {
+										db.Exec("udpate macipmappingcache set IP = ? wheree MAC = ?",mapping[subnet.MAC], subnet.MAC)
 									}
 
 							}
