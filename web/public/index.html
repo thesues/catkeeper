@@ -23,7 +23,7 @@
   <h3>{{Name}}({{IpAddress}})  {{Description}}</h3>
   <table class="table table-hover table-condensed" width="100%">
   <thead>
-  <tr class=info> <th width="30%">Name</th> <th width="10%">Running</th> <th width="20%">Owner</th> <th width="30%">Description</th> <th width="10%">EDIT</th></tr>
+  <tr class=info> <th width="20%">Name</th> <th width="20%">Ip</th> <th width="10%">Running</th> <th width="20%">Owner</th> <th width="20%">Description</th> <th width="10%">EDIT</th></tr>
   </thead>
   <tbody>
   </script>
@@ -36,6 +36,7 @@
 		{{Name}}
 	{{/if}}
   </td>
+  {{#ipmappings MACMapping}}{{MAC}},{{IP}}{{/ipmappings}}
   <td>{{Active}}</td>
   <td>{{Owner}} </td>
   <td>{{Description}} </td>
@@ -59,6 +60,14 @@
 			var doc = document;
 			var div = doc.getElementById("display");
 			var html="";
+			Handlebars.registerHelper('ipmappings', function(items, options){
+							var out="<td>";
+							for(var i=0, l=items.length; i<l; i++){
+								out = out + '<p>' + options.fn(items[i]).split(',')[1] + '</p>';
+							}
+							out = out + "</td>";
+							return out;
+			});
 			var hostshtml = $("#host-begin").html();
 			var hosttemplate = Handlebars.compile(hostshtml);
 			var vmshtml = $("#vms").html();
