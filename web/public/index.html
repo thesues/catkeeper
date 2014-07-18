@@ -63,7 +63,10 @@
 			Handlebars.registerHelper('ipmappings', function(items, options){
 							var out="<td>";
 							for(var i=0, l=items.length; i<l; i++){
-								out = out + '<p>' + options.fn(items[i]).split(',')[1] + '</p>';
+								var ip = options.fn(items[i]).split(',')[1];
+								if( ip == 'not detected')
+									continue;
+								out = out + '<p>' + ip + '</p>';
 							}
 							out = out + "</td>";
 							return out;
