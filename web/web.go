@@ -154,9 +154,8 @@ func main() {
 	    r.JSON(200, pm)
     })
 
-    wsConfig, _ := websocket.NewConfig("ws://127.0.0.1:3000", "http://127.0.0.1:3000")
     ws := websocket.Server{Handler:proxyHandler,
-			    Config: *wsConfig, Handshake: func(ws *websocket.Config, req *http.Request) error {
+			    Handshake: func(ws *websocket.Config, req *http.Request) error {
 			    ws.Protocol = []string{"base64"}
 			    return nil
     }}
@@ -176,6 +175,7 @@ func main() {
 	    }
 
     }()
+
 
     m.Run()
 }
