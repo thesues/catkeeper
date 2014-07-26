@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<script src="include/util.js"></script>
+	</head>
+	<body>
+		<script type="text/javascript">
+			Util.load_scripts(["webutil.js"]);
+
+			window.onload = function() {
+
+				var toke;
+				token = WebUtil.getQueryVar('token', '');
+				var sock = null;
+
+				var wsuri = "ws://127.0.0.1:3000/installsockify?token="+token;
+
+				var ready_to_jump = false
+
+				console.log("onload");
+
+				sock = new WebSocket(wsuri);
+
+				sock.onopen = function() {
+					console.log("connected to " + wsuri);
+				}
+
+				sock.onclose = function(e) {
+					console.log("connection closed (" + e.code + ")");
+				}
+
+				sock.onmessage = function(e) {
+					console.log("message received: " + e.data);
+					if (e.data == "CLOSE") {
+						ready_to_jump = true
+					} else if (ready_to_jump == true) {
+						console.log("INFORMATION received: " + e.data);
+						//than jump
+					}
+				}
+			};
+
+		</script>
+</body>
+<html>
