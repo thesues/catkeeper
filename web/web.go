@@ -15,8 +15,10 @@ import (
 	"fmt"
 	"time"
 	"sync/atomic"
-
+	"code.google.com/p/go-uuid/uuid"
 )
+
+var tokenMap = NewSafeMap()
 
 //TODO move all sql to model.go
 func main() {
@@ -28,6 +30,8 @@ func main() {
     }
     defer db.Close()
 
+
+
     var scanning int32 = 0
 
     m := martini.Classic()
@@ -35,7 +39,7 @@ func main() {
 
 
     m.Get("/", func(r render.Render){
-	    r.HTML(200, "index" , nil)
+	    r.Redirect("index.html")
     })
 
     m.Get("/create", func(r render.Render) {
@@ -62,14 +66,22 @@ func main() {
     })
 
     m.Post("/create", func(r render.Render, req *http.Request) {
-	    r.HTML(200, "create", nil)
+	    //get req
+	    //host
+	    //name
+            m := CreateVirtualMachine()
+	    //generate token
+	    token := uuid.New()
+	    tokenMap.Set(token,m)
+	    redirectStr := fmt.Sprintf("/install.html?token=%s",token)
+	    r.Redirect(redirectStr)
     })
 
 
     m.Get("/add", func(r render.Render) {
 	    r.HTML(200, "add", nil)
-
     })
+
     //missing validation 
     m.Post("/add", func(r render.Render, req *http.Request) {
 	    var existingname string
@@ -154,15 +166,20 @@ func main() {
 	    r.JSON(200, pm)
     })
 
-    ws := websocket.Server{Handler:proxyHandler,
+    vncProxy := websocket.Server{Handler:proxyHandler,
 			    Handshake: func(ws *websocket.Config, req *http.Request) error {
 			    ws.Protocol = []string{"base64"}
 			    return nil
     }}
 
+    m.Get("/websockify", vncProxy.ServeHTTP)
 
-    m.Get("/websockify", ws.ServeHTTP)
+    installState := websocket.Server{Handler:stateReportHandler}
 
+
+    m.Get("/installsockify", installState.ServeHTTP)
+
+    // rescan IP address every 6 hour
     go func(){
 	    for {
 		    time.Sleep(time.Hour * 6)
@@ -176,8 +193,37 @@ func main() {
 
     }()
 
-
     m.Run()
+}
+
+func stateReportHandler(ws *websocket.Conn) {
+	log.Println("start installing")
+	defer ws.Close()
+	r := ws.Request()
+	values := r.URL.Query()
+	//get token
+	_ , ok := values["token"]
+	if ok == false {
+		log.Println("failed to get installation token for url")
+		return
+	}
+	token := values["token"][0]
+
+	if tokenMap.Check(token) == false {
+		log.Println("failed to get installation token")
+		return
+	}
+
+	messageChannel := tokenMap.Get(token).(chan string)
+
+	defer close(messageChannel)
+	defer tokenMap.Delete(token)
+
+	for m := range messageChannel{
+		//output some data
+		log.Println(m)
+		websocket.Message.Send(ws, m)
+	}
 }
 
 func proxyHandler(ws *websocket.Conn) {
@@ -243,6 +289,22 @@ func proxyHandler(ws *websocket.Conn) {
 		break
 	}
 	log.Println("finish connection")
+}
+
+func CreateVirtualMachine() chan string {
+	m := make(chan string, 100)
+	/* TODO add the real part */
+	go func() {
+		m <- "Start"
+		time.Sleep( 3 * time.Second)
+		m <- "Upload"
+		time.Sleep( 3 * time.Second)
+		m <- "Sleeping"
+		time.Sleep( 10 * time.Second)
+		m <- "CLOSE"
+		m <- "INFORMATION"
+	}()
+	return m
 }
 
 func reportError(r render.Render,err error, userError string) {
