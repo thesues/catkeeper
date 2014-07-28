@@ -319,7 +319,7 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 	defer dataPool.Free()
 
 	//var imageSize uint64 = 8589934592 //8G
-	imageStorage := Storage{Name:"linux-dmzhang.img", Size:imageSize, StorageType:"file", Type:"qcow2"}
+	imageStorage := Storage{Name:"linux-dmzhang.img", Size:imageSize, StorageType:"file", Type:"raw"}
 	if xml, err = imageStorage.Encode();err != nil {
 		log.Printf("encode image storage failed %s",err)
 		return err
