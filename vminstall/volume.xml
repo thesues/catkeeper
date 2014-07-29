@@ -1,4 +1,4 @@
-<volume type='{{.StorageType}}'>
+<volume>
 	<name>{{.Name}}</name>
 	<capacity>{{.Size}}</capacity>
 	 <target>

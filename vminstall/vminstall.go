@@ -45,7 +45,7 @@ const (
 	<devices>
 	<emulator>/usr/bin/qemu-kvm</emulator>
 	<disk type='file' device='disk'>
-	<driver name='qemu' type='raw'/>
+	<driver name='qemu' type='qcow2'/>
 	<source file='{{.Image}}'/>
 	<target dev='vda' bus='virtio'/>
 	</disk>
@@ -61,7 +61,7 @@ const (
 	</domain>
 	`
 	STORAGEXML = `
-	<volume type='{{.StorageType}}'>
+	<volume>
 	<name>{{.Name}}</name>
 	<capacity>{{.Size}}</capacity>
 	<target>
@@ -71,6 +71,12 @@ const (
 	`
 )
 
+// MESSAGE to be sent to the channel
+const (
+	VMINSTALL_SUCCESS = "SUCCESS"
+	VMINSTALL_FAIL    = "FAIL"
+)
+
 type  VolumeXMXEncoder interface {
 	Encode() (string, error)
 }
@@ -78,7 +84,7 @@ type  VolumeXMXEncoder interface {
 type Storage struct {
 	Name string
 	Size uint64
-	StorageType string //file or directory or others
+	//StorageType string //file or directory or others
 	Type string //raw or qcow2
 }
 
@@ -163,7 +169,6 @@ func SendLocalToRemote(stream libvirt.VirStream, volume libvirt.VirStorageVol, d
 	if err != nil {
 		return err
 	}
-	log.Println("Finish Send Data...")
 	return nil
 
 }
@@ -195,20 +200,34 @@ func reportStatus(ch chan string, m string) {
 	}
 }
 
+func reportFail(ch chan string, info string) {
+	if ch != nil {
+		ch <- VMINSTALL_FAIL + "|"  + info
+	}
+}
+
+
+func reportSuccess(ch chan string) {
+	if ch != nil {
+		ch <- VMINSTALL_SUCCESS
+	}
+}
+
 // only support SUSE/x86 for now
 // memory is only 512M
 // TODO: use uuid to generate new names
 
-func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize uint64, ch chan string) error {
+func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize uint64, ch chan string) {
 
 	//check input
 
 	if len(name) <= 0 {
-		return errors.New("Name too short")
+		reportFail(ch, "Name too short")
+		return
 	}
 
 	if imageSize == 0 {
-		return errors.New("disk size to short")
+		reportFail(ch, "disk size too short")
 	}
 
 	if ch != nil {
@@ -223,43 +242,39 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 	initrdSurfix := "/boot/x86_64/loader/initrd"
 
 	// Download linux and initrd image from remote 
+	reportStatus(ch, "Downloading linux image")
 	m := DownloadManager{}
 	m.Regsiter(HTTPDownloader{})
 	linuxContent, err := m.Download(url+linuxSurfix)
-
-	log.Println("Downloading linux image")
-	reportStatus(ch, "Downloading linux image")
-
 	if err != nil {
-		log.Println("download linux image failed")
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 
-	log.Println("Downloading initrd image")
 	reportStatus(ch, "Downloading initrd image")
 
 	initrdContent, err := m.Download(url+initrdSurfix)
 	if err != nil {
-		log.Println("download initrd image failed")
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 
 
 	// create remote boot linux storage from temp pool
-	linuxVolume, err := createVolume(pool, Storage{Name:"linux-dmzhang", Size:uint64(len(linuxContent)), StorageType:"file", Type:"raw"})
+	linuxVolume, err := createVolume(pool, Storage{Name:"linux-dmzhang", Size:uint64(len(linuxContent)),Type:"raw"})
 	if err != nil {
-		log.Println("can not Create Volume")
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 	defer linuxVolume.Free()
 	linuxPath, _ := linuxVolume.GetPath()
 
 
 	// create remote boot initrd storage from temp pool
-	initrdVolume, err:= createVolume(pool, Storage{Name:"initrd-dmzhang", Size:uint64(len(initrdContent)), StorageType:"file", Type:"raw"})
+	initrdVolume, err:= createVolume(pool, Storage{Name:"initrd-dmzhang", Size:uint64(len(initrdContent)), Type:"raw"})
 	if err != nil {
-		log.Println("can not Create Volume")
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 	defer initrdVolume.Free()
 	initrdPath, _ := initrdVolume.GetPath()
@@ -269,47 +284,44 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 	var stream libvirt.VirStream
 	stream, err = conn.StreamNew()
 	if err != nil {
-		log.Printf("failed to create stream")
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 	defer stream.Free()
 
 	//Upload to remote
-	log.Println("sending linuxVolume")
 	reportStatus(ch, "sending linuxVolume")
-
 	if err := SendLocalToRemote(stream, linuxVolume, linuxContent); err != nil {
-		log.Println(err)
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 
-	log.Println("sending initrd")
-	reportStatus(ch, "sending initrd")
 
+	reportStatus(ch, "sending initrd")
 	if err := SendLocalToRemote(stream, initrdVolume, initrdContent); err != nil {
-		log.Println(err)
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 
 
 	// create image 
-	log.Println("create remote image")
 	reportStatus(ch, "creating remote imaging...")
-
 	dataPool, err := conn.StoragePoolLookupByName("default")
 	if err != nil {
-		log.Println("can not get default pool")
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 	defer dataPool.Free()
 
 	//var imageSize uint64 = 8589934592 //8G
 
-	imageVolume,err := createVolume(dataPool, Storage{Name:"linux-dmzhang.img", Size:imageSize, StorageType:"file", Type:"raw"})
+	imageVolume,err := createVolume(dataPool, Storage{Name:"linux-dmzhang.img", Size:imageSize, Type:"qcow2"})
+
 	if err != nil {
-		log.Println("WHAT?!!")
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
+
 	defer imageVolume.Free()
 	imagePath, _  := imageVolume.GetPath()
 
@@ -321,15 +333,15 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 	var xml string
 	domain := Domain{Name:"sles12beta10_dmzhang", Kernel:linuxPath, Initrd:initrdPath, Image:imagePath, Install:url}
 	if xml, err = domain.Encode();err != nil {
-		log.Printf("encode domain failed %s",err)
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 
 	// create booting vm
 	bootingDomain, err :=  conn.CreateXML(xml)
 	if err != nil {
-		log.Printf("failed to create remote booting vm")
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 	defer bootingDomain.Free()
 
@@ -337,8 +349,8 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 	// get xml from remote
 	// create new defined xml
 	if xml, err = bootingDomain.GetXMLDesc(); err != nil {
-		log.Printf("can not get xml from remote booting vm")
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
 
 	defer linuxVolume.Delete()
@@ -359,14 +371,13 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 
 	newPersistentDomain, err := conn.DefineXML(xml)
 	if err != nil {
-		log.Println(err)
-		return err
+		reportFail(ch, err.Error())
+		return
 	}
+
 	log.Println(newPersistentDomain)
+	defer newPersistentDomain.Free()
 
-	reportStatus(ch, "Finish Create the Virtual Machine")
+	reportSuccess(ch)
 
-	//close the report channel
-	// no error happend
-	return nil
 }
