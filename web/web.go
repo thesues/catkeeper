@@ -226,6 +226,8 @@ func stateReportHandler(ws *websocket.Conn) {
 	}
 }
 
+//TODO: http://stackoverflow.com/questions/21417223/simple-ssh-port-forward-in-golang
+// use this to improve 
 func proxyHandler(ws *websocket.Conn) {
 	defer ws.Close()
 	r := ws.Request()
