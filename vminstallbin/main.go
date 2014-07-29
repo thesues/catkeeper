@@ -5,9 +5,6 @@ import (
 	"fmt"
 )
 
-
-
-
 func main() {
 	// create remote pool
 	fmt.Println("Creating connection")

@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"errors"
 	"regexp"
-	"fmt"
 )
 
 
@@ -72,6 +71,10 @@ const (
 	`
 )
 
+type  VolumeXMXEncoder interface {
+	Encode() (string, error)
+}
+
 type Storage struct {
 	Name string
 	Size uint64
@@ -109,6 +112,21 @@ func (d Domain) Encode() (string,error) {
 	}
 	t.Execute(&result, d)
 	return result.String(), nil
+}
+
+
+
+func createVolume(pool libvirt.VirStoragePool, vol VolumeXMXEncoder) (libvirt.VirStorageVol, error) {
+
+	xml, err := vol.Encode()
+	if err != nil {
+		return libvirt.VirStorageVol{}, err
+	}
+	volume, err := pool.StorageVolCreateXML(xml,0)
+	if err != nil {
+		return libvirt.VirStorageVol{}, err
+	}
+	return volume,nil
 }
 
 
@@ -171,30 +189,6 @@ func createRemoteBootPool(conn libvirt.VirConnection) (libvirt.VirStoragePool, e
 }
 
 
-func main() {
-	// create remote pool
-	log.Println("Creating connection")
-	conn, err := libvirt.NewVirConnection("qemu+ssh://root@147.2.207.233/system")
-	if (err != nil) {
-		fmt.Println(err)
-		return
-	}
-	defer conn.CloseConnection()
-
-	ch := make(chan string)
-
-	url := "http://mirror.bej.suse.com/dist/install/SLP/SLE-12-Server-Beta10/x86_64/DVD1"
-	name := "dmzhang-test-lifecyle"
-	imageSize := 8589934592
-	go VmInstall(conn, name, url, uint64(imageSize), ch)
-
-	for m := range ch {
-		fmt.Println(m)
-	}
-}
-
-
-
 func reportStatus(ch chan string, m string) {
 	if ch != nil {
 		ch <- m
@@ -251,31 +245,20 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 	}
 
 
-	// create remote boot linux storage
-	var xml string
-	linuxStorage := Storage{Name:"linux-dmzhang", Size:uint64(len(linuxContent)), StorageType:"file", Type:"raw"}
-	if xml, err = linuxStorage.Encode();err != nil {
-		log.Printf("encode linuxStorage failed %s",err)
-		return err
-	}
-	linuxVolume,err := pool.StorageVolCreateXML(xml,0)
+	// create remote boot linux storage from temp pool
+	linuxVolume, err := createVolume(pool, Storage{Name:"linux-dmzhang", Size:uint64(len(linuxContent)), StorageType:"file", Type:"raw"})
 	if err != nil {
-		log.Printf("linux StorageVolCreateXml failed %s",err)
+		log.Println("can not Create Volume")
 		return err
 	}
 	defer linuxVolume.Free()
 	linuxPath, _ := linuxVolume.GetPath()
 
-	// create remote boot initrd storage
-	initrdStorage:= Storage{Name:"initrd-dmzhang", Size:uint64(len(initrdContent)), StorageType:"file", Type:"raw"}
-	if xml, err = initrdStorage.Encode();err != nil {
-		log.Printf("encode linuxStorage failed %s",err)
-		return err
-	}
 
-	initrdVolume,err := pool.StorageVolCreateXML(xml,0)
+	// create remote boot initrd storage from temp pool
+	initrdVolume, err:= createVolume(pool, Storage{Name:"initrd-dmzhang", Size:uint64(len(initrdContent)), StorageType:"file", Type:"raw"})
 	if err != nil {
-		log.Printf("initrd StorageVolCreateXml failed %s",err)
+		log.Println("can not Create Volume")
 		return err
 	}
 	defer initrdVolume.Free()
@@ -311,6 +294,8 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 
 	// create image 
 	log.Println("create remote image")
+	reportStatus(ch, "creating remote imaging...")
+
 	dataPool, err := conn.StoragePoolLookupByName("default")
 	if err != nil {
 		log.Println("can not get default pool")
@@ -319,15 +304,10 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 	defer dataPool.Free()
 
 	//var imageSize uint64 = 8589934592 //8G
-	imageStorage := Storage{Name:"linux-dmzhang.img", Size:imageSize, StorageType:"file", Type:"raw"}
-	if xml, err = imageStorage.Encode();err != nil {
-		log.Printf("encode image storage failed %s",err)
-		return err
-	}
 
-	var imageVolume libvirt.VirStorageVol
-	if imageVolume, err = dataPool.StorageVolCreateXML(xml, 0); err != nil {
-		log.Printf("fail to create remote image volume %s", err)
+	imageVolume,err := createVolume(dataPool, Storage{Name:"linux-dmzhang.img", Size:imageSize, StorageType:"file", Type:"raw"})
+	if err != nil {
+		log.Println("WHAT?!!")
 		return err
 	}
 	defer imageVolume.Free()
@@ -338,6 +318,7 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 	reportStatus(ch, "Create remote VirtualMachine")
 
 	// create boot xml
+	var xml string
 	domain := Domain{Name:"sles12beta10_dmzhang", Kernel:linuxPath, Initrd:initrdPath, Image:imagePath, Install:url}
 	if xml, err = domain.Encode();err != nil {
 		log.Printf("encode domain failed %s",err)
@@ -352,7 +333,6 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 	}
 	defer bootingDomain.Free()
 
-	//TODO find a time to delete linuxVolume and initrdVolume 
 
 	// get xml from remote
 	// create new defined xml
