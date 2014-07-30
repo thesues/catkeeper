@@ -389,8 +389,9 @@ func VmInstall(conn libvirt.VirConnection, vmname string, url string, autoyast s
 	*/
 	/* (?s) is used to let . match newline(\n) */
 	osSection := regexp.MustCompile("(?s)<os>.*</os>")
-	onBoot := regexp.MustCompile("(?s)<on_reboot>.*<on_reboot>")
-	onCrash := regexp.MustCompile("(?s)<on_crash>.*<on_crash>")
+	onBoot := regexp.MustCompile("(?s)<on_reboot>.*</on_reboot>")
+	onCrash := regexp.MustCompile("(?s)<on_crash>.*</on_crash>")
+
 	xml  = osSection.ReplaceAllString(xml, OSSECTION)
 	xml = onBoot.ReplaceAllString(xml, ONBOOT)
 	xml = onCrash.ReplaceAllString(xml, ONCRASH)
