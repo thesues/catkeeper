@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"errors"
 	"regexp"
+	"math/rand"
+	"time"
 )
 
 
@@ -13,6 +15,7 @@ const (
 	OSSECTION = "<os> <type arch='x86_64'>hvm</type><boot dev='hd'/></os>"
 	ONBOOT = "<on_reboot>restart</on_reboot>"
 	ONCRASH ="<on_crash>restart</on_crash>"
+
 	POOXML = `
 	<pool type='dir'>
 	<name>boot-scratch</name>
@@ -206,6 +209,16 @@ func reportFail(ch chan string, info string) {
 	}
 }
 
+func generateFourRandom() string {
+	ret := ""
+	var base  = [4]string{"a","b","c","d"}
+	rand.Seed(time.Now().Unix())
+	for i:= 0; i < 4; i ++ {
+		num := rand.Intn(len(base))
+		ret += base[num]
+	}
+	return ret
+}
 
 func reportSuccess(ch chan string) {
 	if ch != nil {
@@ -217,11 +230,11 @@ func reportSuccess(ch chan string) {
 // memory is only 512M
 // TODO: use uuid to generate new names
 
-func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize uint64, ch chan string) {
+func VmInstall(conn libvirt.VirConnection, vmname string, url string, autoyast string, imageSize uint64, ch chan string) {
 
 	//check input
 
-	if len(name) <= 0 {
+	if len(vmname) <= 0 {
 		reportFail(ch, "Name too short")
 		return
 	}
@@ -260,8 +273,13 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 	}
 
 
+	//prepare two temporary name for linux;initrd image
+	temp := generateFourRandom()
+	bootImageName  := vmname + temp + ".image"
+	bootInitrdName := vmname + temp + ".initrd"
+
 	// create remote boot linux storage from temp pool
-	linuxVolume, err := createVolume(pool, Storage{Name:"linux-dmzhang", Size:uint64(len(linuxContent)),Type:"raw"})
+	linuxVolume, err := createVolume(pool, Storage{Name:bootImageName, Size:uint64(len(linuxContent)),Type:"raw"})
 	if err != nil {
 		reportFail(ch, err.Error())
 		return
@@ -271,7 +289,7 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 
 
 	// create remote boot initrd storage from temp pool
-	initrdVolume, err:= createVolume(pool, Storage{Name:"initrd-dmzhang", Size:uint64(len(initrdContent)), Type:"raw"})
+	initrdVolume, err:= createVolume(pool, Storage{Name:bootInitrdName, Size:uint64(len(initrdContent)), Type:"raw"})
 	if err != nil {
 		reportFail(ch, err.Error())
 		return
@@ -315,7 +333,8 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 
 	//var imageSize uint64 = 8589934592 //8G
 
-	imageVolume,err := createVolume(dataPool, Storage{Name:"linux-dmzhang.img", Size:imageSize, Type:"qcow2"})
+	realImageName := vmname + ".img"
+	imageVolume,err := createVolume(dataPool, Storage{Name:realImageName, Size:imageSize, Type:"qcow2"})
 
 	if err != nil {
 		reportFail(ch, err.Error())
@@ -331,7 +350,15 @@ func VmInstall(conn libvirt.VirConnection, name string, url string, imageSize ui
 
 	// create boot xml
 	var xml string
-	domain := Domain{Name:"sles12beta10_dmzhang", Kernel:linuxPath, Initrd:initrdPath, Image:imagePath, Install:url}
+	// add autoyast
+	var installArg string
+	if len(autoyast) > 0 {
+		installArg = url + " autoyast=" + autoyast
+	} else {
+		installArg = url
+	}
+
+	domain := Domain{Name:vmname, Kernel:linuxPath, Initrd:initrdPath, Image:imagePath, Install:installArg}
 	if xml, err = domain.Encode();err != nil {
 		reportFail(ch, err.Error())
 		return

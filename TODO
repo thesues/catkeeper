@@ -1,2 +1,4 @@
 1. there must be some virtual machined recored in database but not existed any more.
    find a way to clean them
+2. vminstall can not boot restart domain
+3. should support autoyast

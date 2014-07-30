@@ -23,7 +23,7 @@ func TestVmInstall(t *testing.T) {
 	url := "http://mirror.bej.suse.com/dist/install/SLP/SLE-12-Server-Beta10/x86_64/DVD1"
 	name := "dmzhang-test-lifecyle"
 	imageSize := 8589934592
-	go VmInstall(conn, name, url, uint64(imageSize), ch)
+	go VmInstall(conn, name, url, "", uint64(imageSize), ch)
 
 	for m := range ch {
 		fmt.Println(m)
