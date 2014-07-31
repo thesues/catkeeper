@@ -100,6 +100,7 @@ func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress strin
 		fmt.Println("FAIL: find running domain to start vncviewer")
 		return
 	}
+	defer domain.Free()
 
 	/* FIXME XML parse and safe-map should has own package */
 	type MACAttr struct {
