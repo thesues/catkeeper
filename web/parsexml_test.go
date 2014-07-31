@@ -95,10 +95,20 @@ func TestParse(t *testing.T) {
 		Type string `xml:"type,attr"`
 
 	}
+
+	type DiskSource struct {
+		Path string `xml:"file,attr"`
+	}
+	type Disk struct {
+		Source DiskSource `xml:"source"`
+	}
+
 	type Devices struct {
 		Graphics VNCinfo `xml:"graphics"`
 		Interface []BridgeInterface `xml:"interface""`
+		Disks []Disk `xml:"disk"`
 	}
+
 	type xmlParseResult struct {
 		Name string    `xml:"name"`
 		UUID string    `xml:"uuid"`
@@ -124,5 +134,10 @@ func TestParse(t *testing.T) {
 		}
 	}
 	fmt.Println(mac_address)
+
+
+	for _,i := range v.Devices.Disks {
+		fmt.Println(i.Source.Path)
+	}
 }
 

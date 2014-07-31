@@ -34,10 +34,13 @@ func (p *PhysicalMachine) String() string{
 	return result
 }
 
+
+/* used to describe mappings between MAC<=>IP */
 type SubNet struct {
 	MAC string
 	IP string
 }
+
 type VirtualMachine struct {
 	/* database */
 	Id          int
@@ -52,6 +55,7 @@ type VirtualMachine struct {
 	VNCAddress string
 	VNCPort    string
 	VirDomain libvirt.VirDomain
+	Disks     []string
 
 	/*mapping MAC=>IP*/
 	MACMapping []SubNet
@@ -100,18 +104,11 @@ func (this *VirtualMachine) UpdateDatabase(db *sql.DB, owner string, description
 	}
 }
 
+
 // global variables: do not like global variables
 // cached VirConnection
 //IpAddress => VirConnection
-//var ipaddressConnectionCache = make(map[string]libvirt.VirConnection)
-
-// cacheMutex is used to protect the ipaddressConnectionCache map from multiple users 
-//var cacheMutex = &sync.Mutex{}
-
 var ipaddressConnectionCache = NewSafeMap()
-/* map vm ID(created in database) to VirtualMachine*/
-// not used any more
-//var mapVMIDtoVirtualMachine map[int]*VirtualMachine
 
 
 
@@ -292,9 +289,16 @@ func fillVmData(domain libvirt.VirDomain) VirtualMachine {
 	type VNCinfo struct {
 		VNCPort string `xml:"port,attr"`
 	}
+	type DiskSource struct {
+		Path string `xml:"file,attr"`
+	}
+	type Disk struct {
+		Source DiskSource `xml:"source"`
+	}
 	type Devices struct {
 		Graphics VNCinfo `xml:"graphics"`
 		Interface []BridgeInterface `xml:"interface""`
+		Disks []Disk `xml:"disk"`
 	}
 
 	type xmlParseResult struct {
@@ -302,6 +306,8 @@ func fillVmData(domain libvirt.VirDomain) VirtualMachine {
 		UUID string    `xml:"uuid"`
 		Devices  Devices `xml:"devices"`
 	}
+
+
 
 	v := xmlParseResult{}
 	xmlData, _ := domain.GetXMLDesc()
@@ -321,7 +327,15 @@ func fillVmData(domain libvirt.VirDomain) VirtualMachine {
 			macMapping = append(macMapping, SubNet{MAC:i.MAC.Address, IP:"not detected"})
 		}
 	}
-	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain, MACMapping:macMapping}
+
+	/* fill Disk info */
+
+	var vmDisks = make([]string,0)
+	for _, i := range v.Devices.Disks {
+		vmDisks = append(vmDisks, i.Source.Path)
+	}
+
+	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain, MACMapping:macMapping, Disks:vmDisks}
 }
 
 func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
