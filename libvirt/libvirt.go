@@ -14,9 +14,18 @@ import (
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 #include <stdlib.h>
+
+void EventCallBack(virConnectPtr c, virDomainPtr d, void * data);
+void libvirt_eventcallback_cgo(virConnectPtr c, virDomainPtr d, int event, int detail, void * data);
+void VirFreeCallback(void *);
+void libvirt_virfreecalback_cgo(void *opaque);
 */
 import "C"
 
+
+const (
+	DOMAIN_LIFCYCLE = C.VIR_DOMAIN_EVENT_ID_LIFECYCLE
+)
 
 type VirConnection struct {
 	ptr C.virConnectPtr
@@ -30,7 +39,6 @@ type VirDomain struct {
 type VirStream struct {
 	ptr C.virStreamPtr
 }
-
 
 func (c *VirConnection) StreamNew() (VirStream,error) {
 	ptr := C.virStreamNew(c.ptr, 0);
@@ -449,15 +457,6 @@ func (p *VirStoragePool) IsActive() bool{
 		return false
 	}
 }
-/*
-func (p *VirStoragePool) Free() error {
-	result := C.virStoragePoolFree(p.ptr)
-	if result < 0 {
-		return errors.New(GetLastError())
-	}
-	return nil
-}
-*/
 
 type VirStorageVol struct {
 	ptr C.virStorageVolPtr
@@ -491,3 +490,53 @@ func (v *VirStorageVol) Delete() error {
 	}
 	return nil
 }
+
+
+// event callbacks
+
+func  EventRegisterDefaultImpl() error {
+	result := C.virEventRegisterDefaultImpl()
+	if result == -1 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
+
+func EventRunDefaultImpl() int {
+	result := C.virEventRunDefaultImpl()
+	return int(result)
+}
+
+type EventHandler interface{
+	EventHandle(conn VirConnection, domain VirDomain)
+	FreeHandle()
+}
+
+
+//export EventCallBack
+func EventCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, cData unsafe.Pointer) {
+	var p EventHandler = (interface{})(cData).(EventHandler)
+	p.EventHandle(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr})
+
+}
+
+//export VirFreeCallback
+func VirFreeCallback(cData unsafe.Pointer) {
+	var p EventHandler = (interface{})(cData).(EventHandler)
+	p.FreeHandle()
+}
+
+
+func ConnectDomainEventRegister(conn VirConnection,domain VirDomain, eventHandler EventHandler) int {
+	if eventHandler == nil {
+		fmt.Println("wrong")
+		return -1
+	}
+	r := C.virConnectDomainEventRegisterAny(conn.ptr, domain.ptr, C.VIR_DOMAIN_EVENT_ID_LIFECYCLE,
+				C.virConnectDomainEventGenericCallback(C.libvirt_eventcallback_cgo),
+				unsafe.Pointer(&eventHandler),
+				(C.virFreeCallback)(C.libvirt_virfreecalback_cgo))
+	result := int(r)
+	return result
+}
+

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"errors"
+	"time"
 )
 
 func TestNewVirConnection(t *testing.T) {
@@ -252,5 +253,62 @@ func TestStreamTransfer(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Println("Finish Send Data...")
+
+}
+
+
+/* event monitor */
+type MyTestFuncs struct {
+	test string
+
+}
+
+func (this MyTestFuncs) EventHandle(conn VirConnection, domain VirDomain) {
+	fmt.Println(this.test)
+}
+
+func (this MyTestFuncs) FreeHandle() {
+}
+
+func TestEventMonitor(t *testing.T) {
+	EventRegisterDefaultImpl()
+	go func(){
+		for {
+		EventRunDefaultImpl()
+	}
+	}()
+
+	conn, err := NewVirConnection("qemu+ssh://root@147.2.207.233/system")
+	if (err != nil) {
+		t.Error(err)
+		return
+	}
+	defer conn.CloseConnection()
+	domain, err := conn.LookupByName("clmd_n1_sles12")
+	if (err != nil) {
+		t.Error(err)
+		return
+	}
+	defer domain.Free()
+	var x = MyTestFuncs{test:"asfasf"}
+
+	regId := ConnectDomainEventRegister(conn, domain, x)
+	fmt.Println(regId)
+
+
+	domain1, err := conn.LookupByName("cl5_n1_opensuse131")
+	if (err != nil) {
+		t.Error(err)
+		return
+	}
+	defer domain1.Free()
+
+	regId = ConnectDomainEventRegister(conn, domain1,  x)
+	fmt.Println(regId)
+
+	for {
+		time.Sleep(1)
+	}
+
 
 }
