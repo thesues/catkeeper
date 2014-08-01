@@ -1,4 +1,4 @@
-package main
+package nmap
 
 import ("os"
 	"os/exec"

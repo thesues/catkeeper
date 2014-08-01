@@ -8,6 +8,9 @@ import (
 
 	"errors"
 	"dmzhang/catkeeper/libvirt"
+	"dmzhang/catkeeper/nmap"
+	"dmzhang/catkeeper/utils"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -108,7 +111,7 @@ func (this *VirtualMachine) UpdateDatabase(db *sql.DB, owner string, description
 // global variables: do not like global variables
 // cached VirConnection
 //IpAddress => VirConnection
-var ipaddressConnectionCache = NewSafeMap()
+var ipaddressConnectionCache = utils.NewSafeMap()
 
 
 
@@ -278,40 +281,7 @@ func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, err
 //TODO: in the futhure, use vm := VirtualMachine{};fillvmData(domain,vm)
 func fillVmData(domain libvirt.VirDomain) VirtualMachine {
 
-	type MACAttr struct {
-		Address string `xml:"address,attr"`
-	}
-	type BridgeInterface struct {
-		MAC MACAttr`xml:"mac"`
-		Type string `xml:"type,attr"`
-
-	}
-	type VNCinfo struct {
-		VNCPort string `xml:"port,attr"`
-	}
-	type DiskSource struct {
-		Path string `xml:"file,attr"`
-	}
-	type Disk struct {
-		Source DiskSource `xml:"source"`
-	}
-	type Devices struct {
-		Graphics VNCinfo `xml:"graphics"`
-		Interface []BridgeInterface `xml:"interface""`
-		Disks []Disk `xml:"disk"`
-	}
-
-	type xmlParseResult struct {
-		Name string    `xml:"name"`
-		UUID string    `xml:"uuid"`
-		Devices  Devices `xml:"devices"`
-	}
-
-
-
-	v := xmlParseResult{}
-	xmlData, _ := domain.GetXMLDesc()
-	xml.Unmarshal([]byte(xmlData), &v)
+	v := utils.ParseDomainXML(xmlData)
 	/* if VNCPort is -1, this means the domain is closed */
 	var active = false
 	var vncPort = ""
@@ -432,7 +402,7 @@ func RescanIPAddress(db *sql.DB) {
 
 	for _, myIP:= range LocalIPs() {
 		/* scan */
-		mapping,err := Nmap(myIP)
+		mapping,err := nmap.Nmap(myIP)
 		if err != nil {
 			checkErr(err,"nmap failed")
 			continue
