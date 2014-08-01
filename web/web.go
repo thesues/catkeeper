@@ -16,9 +16,10 @@ import (
 	"time"
 	"sync/atomic"
 	"code.google.com/p/go-uuid/uuid"
+	"dmzhang/catkeeper/utils"
 )
 
-var tokenMap = NewSafeMap()
+var tokenMap = utils.NewSafeMap()
 
 //TODO move all sql to model.go
 func main() {

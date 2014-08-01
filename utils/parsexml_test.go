@@ -1,9 +1,8 @@
-package main
+package utils
 
 import (
 	"fmt"
 	"testing"
-	"encoding/xml"
 )
 
 const xmlData = `
@@ -83,40 +82,9 @@ const xmlData = `
 `
 
 func TestParse(t *testing.T) {
-	type VNCinfo struct {
-		VNCPort string `xml:"port,attr"`
-	}
 
-	type MACAttr struct {
-		Address string `xml:"address,attr"`
-	}
-	type BridgeInterface struct {
-		MAC MACAttr`xml:"mac"`
-		Type string `xml:"type,attr"`
-
-	}
-
-	type DiskSource struct {
-		Path string `xml:"file,attr"`
-	}
-	type Disk struct {
-		Source DiskSource `xml:"source"`
-	}
-
-	type Devices struct {
-		Graphics VNCinfo `xml:"graphics"`
-		Interface []BridgeInterface `xml:"interface""`
-		Disks []Disk `xml:"disk"`
-	}
-
-	type xmlParseResult struct {
-		Name string    `xml:"name"`
-		UUID string    `xml:"uuid"`
-		Devices  Devices `xml:"devices"`
-	}
-	v := xmlParseResult{}
-
-	xml.Unmarshal([]byte(xmlData),&v)
+	v := ParseDomainXML(xmlData)
+	fmt.Println(*v)
 
 	if v.Name != "cl8_n1_sles12b8" {
 		t.Errorf("parse Name failed")
@@ -133,11 +101,10 @@ func TestParse(t *testing.T) {
 			mac_address[i.MAC.Address] = "not detected"
 		}
 	}
-	fmt.Println(mac_address)
-
-
 	for _,i := range v.Devices.Disks {
-		fmt.Println(i.Source.Path)
+		if i.Source.Path != "/mnt/vm/cl8_n1_sles12b8/disk0.qcow2" {
+			t.Errorf("parse disk file failed")
+		}
 	}
 }
 
