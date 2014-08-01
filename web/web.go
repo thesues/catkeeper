@@ -43,6 +43,7 @@ func main() {
 	    r.Redirect("index.html")
     })
 
+    //Install a new VM
     m.Get("/create", func(r render.Render) {
 	    var Name string
 	    var IpAddress string
@@ -84,6 +85,7 @@ func main() {
     })
 
     //missing validation 
+    //ADD new PhysicalMachine
     m.Post("/add", func(r render.Render, req *http.Request) {
 	    var existingname string
 	    name := req.PostFormValue("Name")
@@ -115,6 +117,15 @@ func main() {
     })
 
 
+    m.Post("/vm/delete/(?P<id>[0-9]+)", func(r render.Render, params martini.Params) {
+	    id,_ := strconv.Atoi(params["id"])
+	    vm := getVirtualMachine(db,id)
+	    err := vm.Delete(db)
+	    if err != nil {
+		    reportError(r, err, "I can not delete the vm")
+	    }
+	    r.Redirect("index.html")
+    })
 
     m.Post("/rescan", func(req *http.Request) {
 	    if atomic.LoadInt32(&scanning) == 0{

@@ -56,8 +56,10 @@ type VirtualMachine struct {
 	Active bool
 	VNCAddress string
 	VNCPort    string
-	VirDomain libvirt.VirDomain
 	Disks     []string
+	VirDomain libvirt.VirDomain
+
+	Connect  libvirt.VirConnection
 
 	/*mapping MAC=>IP*/
 	MACMapping []SubNet
@@ -76,6 +78,55 @@ func (this *VirtualMachine) Start() error{
 
 }
 
+func (this *VirtualMachine) Delete(db *sql.DB) error {
+	this.VirDomain.Destroy()
+	//get storage pool
+	pool, err := this.Connect.StoragePoolLookupByName("default")
+	if err != nil {
+		return err
+	}
+	defer pool.Free()
+
+	for _, diskpath := range this.Disks {
+
+		v, err := pool.LookupStorageVolByName(diskpath)
+		if err != nil {
+			log.Printf("%s can not be found by libvirt",diskpath)
+			continue
+		}
+		//delete storage
+		v.Delete()
+		v.Free()
+	}
+
+	//remove domain
+	err = this.VirDomain.Delete()
+	if err != nil {
+		return err
+	}
+	//remove from database
+	_, err = db.Exec("delete from virtualmachine where Id = ?", this.Id)
+	if err != nil {
+		return err
+	}
+	//find VM's all mac address, delete all mac<=>ip mappings
+	rows, err := db.Query("select MAC from vmmacmapping where VmId = ?", this.Id)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var mac string
+	for rows.Next() {
+		rows.Scan(&mac)
+		db.Exec("delete from macipmappingcache where MAC = ?", mac)
+	}
+
+	_, err = db.Exec("delete from vmmacmapping where Id = ?", this.Id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 func (this *VirtualMachine) Stop() error {
 	err := this.VirDomain.Shutdown()
@@ -272,13 +323,14 @@ func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, err
 	if err != nil {
 		return VirtualMachine{},err
 	}
-	vm := fillVmData(domain)
+	vm := fillVmData(domain, conn)
+
 	return vm,nil
 }
 
 
 //TODO: in the futhure, use vm := VirtualMachine{};fillvmData(domain,vm)
-func fillVmData(domain libvirt.VirDomain) VirtualMachine {
+func fillVmData(domain libvirt.VirDomain, conn libvirt.VirConnection) VirtualMachine {
 
 	xmlData, _ := domain.GetXMLDesc()
 	v := utils.ParseDomainXML(xmlData)
@@ -305,7 +357,7 @@ func fillVmData(domain libvirt.VirDomain) VirtualMachine {
 		vmDisks = append(vmDisks, i.Source.Path)
 	}
 
-	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain, MACMapping:macMapping, Disks:vmDisks}
+	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain, MACMapping:macMapping, Disks:vmDisks, Connect:conn}
 }
 
 func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
@@ -376,7 +428,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 			go func(host *PhysicalMachine){
 				domains, _ := host.VirConn.ListAllDomains()
 				for _, virdomain := range domains {
-					vm := fillVmData(virdomain)
+					vm := fillVmData(virdomain, conn)
 					if vm.Active == true {
 						vm.VNCAddress = host.IpAddress
 					}
