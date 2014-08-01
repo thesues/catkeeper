@@ -102,33 +102,8 @@ func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress strin
 	}
 	defer domain.Free()
 
-	/* FIXME XML parse and safe-map should has own package */
-	type MACAttr struct {
-		Address string `xml:"address,attr"`
-	}
-	type BridgeInterface struct {
-		MAC MACAttr`xml:"mac"`
-		Type string `xml:"type,attr"`
-
-	}
-	type VNCinfo struct {
-		VNCPort string `xml:"port,attr"`
-	}
-	type Devices struct {
-		Graphics VNCinfo `xml:"graphics"`
-		Interface []BridgeInterface `xml:"interface""`
-	}
-
-	type xmlParseResult struct {
-		Name string    `xml:"name"`
-		UUID string    `xml:"uuid"`
-		Devices  Devices `xml:"devices"`
-	}
-
-	v := xmlParseResult{}
-	/* FIXME:code copied from web */
 	xmlData, _ := domain.GetXMLDesc()
-	xml.Unmarshal([]byte(xmlData), &v)
+	v := utils.ParseDomainXML(xmlData)
 
 	/* to get VNC port */
 	var vncPort string

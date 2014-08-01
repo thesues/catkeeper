@@ -8,6 +8,9 @@ import (
 
 	"errors"
 	"dmzhang/catkeeper/libvirt"
+	"dmzhang/catkeeper/nmap"
+	"dmzhang/catkeeper/utils"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -34,10 +37,13 @@ func (p *PhysicalMachine) String() string{
 	return result
 }
 
+
+/* used to describe mappings between MAC<=>IP */
 type SubNet struct {
 	MAC string
 	IP string
 }
+
 type VirtualMachine struct {
 	/* database */
 	Id          int
@@ -52,6 +58,7 @@ type VirtualMachine struct {
 	VNCAddress string
 	VNCPort    string
 	VirDomain libvirt.VirDomain
+	Disks     []string
 
 	/*mapping MAC=>IP*/
 	MACMapping []SubNet
@@ -100,18 +107,11 @@ func (this *VirtualMachine) UpdateDatabase(db *sql.DB, owner string, description
 	}
 }
 
+
 // global variables: do not like global variables
 // cached VirConnection
 //IpAddress => VirConnection
-//var ipaddressConnectionCache = make(map[string]libvirt.VirConnection)
-
-// cacheMutex is used to protect the ipaddressConnectionCache map from multiple users 
-//var cacheMutex = &sync.Mutex{}
-
-var ipaddressConnectionCache = NewSafeMap()
-/* map vm ID(created in database) to VirtualMachine*/
-// not used any more
-//var mapVMIDtoVirtualMachine map[int]*VirtualMachine
+var ipaddressConnectionCache = utils.NewSafeMap()
 
 
 
@@ -281,31 +281,7 @@ func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, err
 //TODO: in the futhure, use vm := VirtualMachine{};fillvmData(domain,vm)
 func fillVmData(domain libvirt.VirDomain) VirtualMachine {
 
-	type MACAttr struct {
-		Address string `xml:"address,attr"`
-	}
-	type BridgeInterface struct {
-		MAC MACAttr`xml:"mac"`
-		Type string `xml:"type,attr"`
-
-	}
-	type VNCinfo struct {
-		VNCPort string `xml:"port,attr"`
-	}
-	type Devices struct {
-		Graphics VNCinfo `xml:"graphics"`
-		Interface []BridgeInterface `xml:"interface""`
-	}
-
-	type xmlParseResult struct {
-		Name string    `xml:"name"`
-		UUID string    `xml:"uuid"`
-		Devices  Devices `xml:"devices"`
-	}
-
-	v := xmlParseResult{}
-	xmlData, _ := domain.GetXMLDesc()
-	xml.Unmarshal([]byte(xmlData), &v)
+	v := utils.ParseDomainXML(xmlData)
 	/* if VNCPort is -1, this means the domain is closed */
 	var active = false
 	var vncPort = ""
@@ -321,7 +297,15 @@ func fillVmData(domain libvirt.VirDomain) VirtualMachine {
 			macMapping = append(macMapping, SubNet{MAC:i.MAC.Address, IP:"not detected"})
 		}
 	}
-	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain, MACMapping:macMapping}
+
+	/* fill Disk info */
+
+	var vmDisks = make([]string,0)
+	for _, i := range v.Devices.Disks {
+		vmDisks = append(vmDisks, i.Source.Path)
+	}
+
+	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain, MACMapping:macMapping, Disks:vmDisks}
 }
 
 func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
@@ -418,7 +402,7 @@ func RescanIPAddress(db *sql.DB) {
 
 	for _, myIP:= range LocalIPs() {
 		/* scan */
-		mapping,err := Nmap(myIP)
+		mapping,err := nmap.Nmap(myIP)
 		if err != nil {
 			checkErr(err,"nmap failed")
 			continue
