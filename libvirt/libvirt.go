@@ -252,6 +252,30 @@ func (c *VirConnection) CreateAndBootNewDomain(xml string)(VirDomain,error) {
 	return VirDomain{ptr:cDomainPtr},nil
 }
 
+func (c *VirConnection) CreateXML(xml string)(VirDomain,error) {
+        cXml := C.CString(xml)
+        defer C.free(unsafe.Pointer(cXml))
+
+        cDomainPtr := C.virDomainCreateXML(c.ptr, cXml, 0)
+        if cDomainPtr == nil {
+                return VirDomain{}, errors.New(GetLastError())
+
+        }
+	return VirDomain{ptr:cDomainPtr},nil
+
+}
+
+func (c *VirConnection) DefineXML(xml string)(VirDomain, error) {
+	cXml := C.CString(xml)
+	defer C.free(unsafe.Pointer(cXml))
+
+	cDomainPtr := C.virDomainDefineXML(c.ptr, cXml)
+	if cDomainPtr == nil {
+		return VirDomain{}, errors.New(GetLastError())
+	}
+	return VirDomain{ptr:cDomainPtr},nil
+}
+
 
 func (c *VirConnection) StoragePoolLookupByName(name string) (VirStoragePool,error){
 	cName := C.CString(name)

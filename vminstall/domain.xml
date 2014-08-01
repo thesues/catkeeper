@@ -1,0 +1,36 @@
+<domain type='kvm'>
+	<name>{{.Name}}</name>
+	<memory unit='KiB'>524288</memory>
+	<currentMemory unit='KiB'>524288</currentMemory>
+	<vcpu placement='static'>4</vcpu>
+	<resource>
+		<partition>/machine</partition>
+	</resource>
+	<os>
+		<type arch='x86_64' machine='pc-i440fx-1.4'>hvm</type>
+		<kernel>{{.Kernel}}</kernel>
+		<initrd>{{.Initrd}}</initrd>
+		<cmdline>install={{.Install}}</cmdline>
+		<boot dev='network'/>
+	</os>
+	<clock offset='utc'/>
+	<on_poweroff>destroy</on_poweroff>
+	<on_reboot>destroy</on_reboot>
+	<on_crash>destroy</on_crash>
+	<devices>
+		<emulator>/usr/bin/qemu-kvm</emulator>
+		<disk type='file' device='disk'>
+			<driver name='qemu' type='qcow2'/>
+			<source file='{{.Image}}'/>
+			<target dev='vda' bus='virtio'/>
+		</disk>
+		<graphics type='vnc' autoport='yes'>
+			<listen type='address' address='0.0.0.0'/>
+		</graphics>
+		<interface type='bridge'>
+			<source bridge='br2'/>
+			<model type='virtio'/>
+		</interface>
+	</devices>
+	<seclabel type='none'/>
+</domain>

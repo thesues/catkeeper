@@ -1,0 +1,7 @@
+<pool type='dir'>
+  <name>boot-scratch</name>
+  <target>
+    <path>/var/lib/libvirt/boot</path>
+  </target>
+</pool>
+

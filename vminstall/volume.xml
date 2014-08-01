@@ -1,0 +1,7 @@
+<volume>
+	<name>{{.Name}}</name>
+	<capacity>{{.Size}}</capacity>
+	 <target>
+		 <format type='{{.Type}}'/>
+	 </target>
+</volume>
