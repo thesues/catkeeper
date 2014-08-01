@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"log"
 	"fmt"
-	"encoding/xml"
 
 	"errors"
 	"dmzhang/catkeeper/libvirt"
@@ -281,6 +280,7 @@ func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, err
 //TODO: in the futhure, use vm := VirtualMachine{};fillvmData(domain,vm)
 func fillVmData(domain libvirt.VirDomain) VirtualMachine {
 
+	xmlData, _ := domain.GetXMLDesc()
 	v := utils.ParseDomainXML(xmlData)
 	/* if VNCPort is -1, this means the domain is closed */
 	var active = false
@@ -400,7 +400,7 @@ func RescanIPAddress(db *sql.DB) {
 
 	hosts := getListofPhysicalMachineAndVirtualMachine(db)
 
-	for _, myIP:= range LocalIPs() {
+	for _, myIP:= range utils.LocalIPs() {
 		/* scan */
 		mapping,err := nmap.Nmap(myIP)
 		if err != nil {
