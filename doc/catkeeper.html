@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+ "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title></title>
+  <link rel="stylesheet" type="text/css" media="screen, projection, print"
+    href="http://www.w3.org/Talks/Tools/Slidy2/styles/slidy.css" />
+  <script src="http://www.w3.org/Talks/Tools/Slidy2/scripts/slidy.js.gz"
+    charset="utf-8" type="text/javascript"></script>
+</head>
+<body>
+<div class="section slide level1" id="catkeeper">
+<h1 id="catkeeper">catkeeper</h1>
+<p>A virt-manager-like web application</p>
+<p>Why:</p>
+<p>features:</p>
+<ul>
+<li>Create/Stop/Update virtual machine information</li>
+<li>additional information such as who reserved this</li>
+<li>web VNC support</li>
+<li>automatically scan virtual machine IP address</li>
+<li>filter virtual machine</li>
+<li>should be faster than python/ruby</li>
+</ul>
+</div>
+<div class="section slide level1" id="go">
+<h1 id="go">Go</h1>
+<ol style="list-style-type: decimal">
+<li>native language;type between static language and dynamic language</li>
+<li>goroutine <a href="http://www.chiark.greenend.org.uk/~sgtatham/coroutines.html">coroutines</a></li>
+<li>very easy to write network application</li>
+<li>rich libary support</li>
+<li>cgo</li>
+<li>Applications: docker</li>
+</ol>
+</div>
+<div class="section slide level1" id="libvirt-bindings">
+<h1 id="libvirt-bindings">libvirt Bindings</h1>
+<p>call C code from Go</p>
+<pre><code>package print
+
+// #include &lt;stdio.h&gt;
+// #include &lt;stdlib.h&gt;
+import &quot;C&quot;
+import &quot;unsafe&quot;
+
+func Print(s string) {
+    cs := C.CString(s)
+    defer C.free(unsafe.Pointer(cs))
+    C.fputs(cs, (*C.FILE)(C.stdout))
+}</code></pre>
+<p>call Go code from C</p>
+<p>callback functions</p>
+<pre><code>https://code.google.com/p/go-wiki/wiki/cgo</code></pre>
+</div>
+<div class="section slide level1" id="libvirt">
+<h1 id="libvirt">libvirt</h1>
+<h2 id="connection">Connection</h2>
+<p>example:</p>
+<p>qemu+ssh://root@147.2.207.233/system</p>
+<p>qemu: one of the underlining drivers(xen,lxc,)</p>
+<p>ssh: conntection method(tls)</p>
+<h2 id="ssh-tunnel">ssh tunnel</h2>
+<p>background:</p>
+<p>vncviewer 147.2.207.233:5901</p>
+<p>nc www.newsmth.net 23</p>
+<p>code from virt-viewer</p>
+<pre><code>char *cmd[10] = {&quot;ssh&quot;, &quot;-p&quot;, &quot;22&quot;, &quot;nc&quot;, &quot;147.2.207.233&quot;,&quot;5901&quot;}
+virt_viewer_app_open_tunnel(const char **cmd)
+{
+    int fd[2];
+    pid_t pid;
+
+    if (socketpair(PF_UNIX, SOCK_STREAM, 0, fd) &lt; 0)
+    return -1;
+
+    pid = fork();
+    if (pid == -1) {
+    close(fd[0]);
+    close(fd[1]);
+    return -1;
+    }
+
+    if (pid == 0) { /* child */
+    close(fd[0]);
+    close(0);
+    close(1);
+    if (dup(fd[1]) &lt; 0)
+        _exit(1);
+    if (dup(fd[1]) &lt; 0)
+        _exit(1);
+    close(fd[1]);
+    execvp(&quot;ssh&quot;, (char *const*)cmd);
+    _exit(1);
+    }
+    close(fd[1]);
+    return fd[0];
+}</code></pre>
+<h2 id="do-something">Do something</h2>
+<p>two methods to manipulate VM</p>
+<ol style="list-style-type: decimal">
+<li>direct manipulate by RPC API Stop/Start/Destory</li>
+<li>EDIT XML by RPC API</li>
+</ol>
+<p>A virtual machine = metadata(xml) + data(disk image) So the metadata(XML) is very important</p>
+<pre><code> Create Domain/Storage/StoragePool with XML
+ e.g create new virtual machine
+ 1. Define a closed VM using XML
+ 2. Create VM(Start VM)
+
+ e.g. change VM&#39;s Name
+ 1. Get Domain&#39;s XML
+ 2. edit origin XML into new XML 
+ 3. Undefine VM
+ 4. Define VM 
+ 4. Create VM</code></pre>
+</div>
+<div class="section slide level1" id="install-remote-vm-through-http-repo-and-autoyast">
+<h1 id="install-remote-vm-through-http-repo-and-autoyast">Install REMOTE VM through http repo and autoyast</h1>
+<ol style="list-style-type: decimal">
+<li>Download initrd/linux from http repo</li>
+<li>create two file in the remote node by</li>
+<li>Upload initrd, kernel (libvirt stream)</li>
+<li>create disk file for VM 4.1 could be any Storage Type(logical volume, file, iscsi)</li>
+<li>generate BOOT.XML</li>
+<li>generate FINAL.XML</li>
+<li>difference bewteen BOOT.XML and FINAL.XML</li>
+<li>Bootup a temperary VM(do not write the xml to disk) using BOOT.XML</li>
+<li>Define a persistent VM(do not start it) using FINAL.XML</li>
+<li>monitor the reboot events of VM if rebooting, start the persistent VM</li>
+</ol>
+</div>
+<div class="section slide level1" id="take-a-break">
+<h1 id="take-a-break">take a break</h1>
+<ol style="list-style-type: decimal">
+<li>vminstall and virt-install</li>
+<li>if you close virt-manage before installinig is finished, the vm can not be rebooted</li>
+</ol>
+</div>
+<div class="section slide level1" id="go-web-framework">
+<h1 id="go-web-framework">go web framework</h1>
+<p><a href="http://martini.codegangsta.io/">martini</a> pros:</p>
+<ol style="list-style-type: decimal">
+<li>routing</li>
+<li>JSON rending</li>
+</ol>
+<p>cons:</p>
+<ol style="list-style-type: decimal">
+<li>I have to write SQL myself</li>
+</ol>
+<h2 id="get-vm-info">Get VM INFO</h2>
+<ol style="list-style-type: decimal">
+<li>lookup database for all the physicall machine</li>
+<li>lookup libvirt for all information if Connection is cached and is alive: get Information (parsing XML) else: re-connect physicall machine put new connection into cache</li>
+<li>lookup database again for details of virtual machines</li>
+</ol>
+<p>goroutine could be used here to get VM information</p>
+<h2 id="edit-vm-info">Edit VM INFO</h2>
+<ol style="list-style-type: decimal">
+<li>Get VM INFO</li>
+<li>edit Vm throught libvirt</li>
+<li>edit database</li>
+</ol>
+<h2 id="novnc">noVNC</h2>
+<ol style="list-style-type: decimal">
+<li>noVNC is used in openstack</li>
+<li>server uses websocket to push data</li>
+<li>HTML5 to render the screen</li>
+<li>qemu in sle11sp3 does not support websocket</li>
+</ol>
+<p>web browser &lt;=&gt; catkeeper proxy &lt;=&gt; qemu</p>
+<h2 id="install-vm">Install VM</h2>
+<ol style="list-style-type: decimal">
+<li><p>only a binary is available</p>
+<p>vminstallbin --host= 147.2.207.133 --repo=http://147.2.207.233/repo/SLP/sle12-beta10/x86_64/DVD1 --disk=8 --autoyast=http://a.xml</p></li>
+</ol>
+<h2 id="scan-ip">Scan IP</h2>
+<ol style="list-style-type: decimal">
+<li>arp -an</li>
+<li>#nmap -sP net</li>
+</ol>
+<h2 id="how-to-filter">How to filter</h2>
+<p>javascript get json data from web server</p>
+</div>
+<div class="section slide level1" id="what-i-learned">
+<h1 id="what-i-learned">What I learned?</h1>
+<ol style="list-style-type: decimal">
+<li>SSH TUNNEL in C</li>
+<li>libvirt API</li>
+<li>Python is easier to write</li>
+</ol>
+</div>
+</body>
+</html>
