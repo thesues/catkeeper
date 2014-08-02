@@ -282,8 +282,7 @@ func TestEventMonitor(t *testing.T) {
 	go func(){
 		for {
 		EventRunDefaultImpl()
-	}
-	}()
+	}}()
 
 	conn, err := NewVirConnection("qemu+ssh:///system")
 	if (err != nil) {

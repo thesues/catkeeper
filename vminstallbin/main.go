@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os/exec"
 	"encoding/xml"
+	"time"
 )
 
 func usage() {
@@ -82,17 +83,32 @@ func main() {
 
 	go vminstall.VmInstall(conn, name, repo, autoinst, uint64(imageSize), ch)
 
+	var quiltChan = make(chan bool)
 	for m := range ch {
 		if m == vminstall.VMINSTALL_SUCCESS {
-			startVNCviewer(conn, name, *hostPtr)
-		} else {
-			fmt.Println(m)
+			break
 		}
+		fmt.Println(m)
+	}
+	startVNCviewer(conn, name, *hostPtr, quiltChan)
+}
+
+type listener struct {
+	quitchan chan bool
+}
+func (this *listener) FreeHandle() {
+}
+
+func (this *listener) EventHandle(conn VirConnection, domain VirDomain, event int, detail int) {
+	fmt.Println(event)
+	if event ==  VIR_DOMAIN_EVENT_STOPPED {
+		//to restart the domain
+		domain.Create()
+		this.quitchan <- true
 	}
 }
 
-
-func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress string) {
+func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress string, quiltchan chan bool) {
 	fmt.Println("would bring up vncviewer...")
 	var domain libvirt.VirDomain
 	domain ,err := conn.LookupByName(name)
@@ -111,14 +127,39 @@ func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress strin
 		fmt.Println("FAIL:Can not get vnc port")
 		return
 	}
-	vncPort =  v.Devices.Graphics.VNCPort
-	fmt.Println("RUNNING: vncviewer " + hostIPAddress + ":" + vncPort)
-	cmd := exec.Command("vncviewer", hostIPAddress + ":" + vncPort)
-	err = cmd.Start()
-	if err != nil {
-		fmt.Println("FAIL:can not start vncviewer")
-		fmt.Println(err)
-		return
-	}
 
+	vncPort =  v.Devices.Graphics.VNCPort
+	fmt.Println("Running reboot listener")
+
+	go func(){
+		EventRegisterDefaultImpl()
+		// EventRunDefaultImpl has to be run before register. or no events caught,
+		// I do not know why
+		go func(){
+			for {
+			EventRunDefaultImpl()
+		}}()
+
+		l := listener{quiltchan}
+	        ConnectDomainEventRegister(conn, domain,  &l)
+		for {
+			time.Sleep(1)
+		}
+	}()
+
+	fmt.Println("RUNNING: vncviewer " + hostIPAddress + ":" + vncPort)
+	go func() {
+		cmd := exec.Command("vncviewer", hostIPAddress + ":" + vncPort)
+		//Run will block
+		err = cmd.Run()
+		if err != nil {
+			fmt.Println("FAIL:can not start vncviewer")
+			fmt.Println(err)
+			return
+		}
+		quiltchan <- true
+	}()
+
+	//either get reboot event or user quit the vncviewer gui, this application will quit
+	<-quiltchan
 }
