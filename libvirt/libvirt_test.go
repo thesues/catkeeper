@@ -2,8 +2,8 @@ package libvirt
 import (
 	"testing"
 	"fmt"
-	"io/ioutil"
-	"errors"
+	//"io/ioutil"
+	//"errors"
 	"time"
 )
 
@@ -260,11 +260,18 @@ func TestStreamTransfer(t *testing.T) {
 /* event monitor */
 type MyTestFuncs struct {
 	test string
-
 }
 
-func (this MyTestFuncs) EventHandle(conn VirConnection, domain VirDomain) {
-	fmt.Println(this.test)
+func (this MyTestFuncs) EventHandle(conn VirConnection, domain VirDomain, event int, detail int) {
+	fmt.Println(event)
+	switch event {
+	case VIR_DOMAIN_EVENT_STARTED:
+		fmt.Println("Starting")
+	case VIR_DOMAIN_EVENT_STOPPED:
+		fallthrough
+	case VIR_DOMAIN_EVENT_SHUTDOWN:
+		fmt.Println("Shutdown")
+	}
 }
 
 func (this MyTestFuncs) FreeHandle() {
@@ -278,32 +285,25 @@ func TestEventMonitor(t *testing.T) {
 	}
 	}()
 
-	conn, err := NewVirConnection("qemu+ssh://root@147.2.207.233/system")
+	conn, err := NewVirConnection("qemu+ssh:///system")
 	if (err != nil) {
 		t.Error(err)
 		return
 	}
 	defer conn.CloseConnection()
-	domain, err := conn.LookupByName("clmd_n1_sles12")
+
+	var regId int
+
+	domain, err := conn.LookupByName("asdf")
 	if (err != nil) {
 		t.Error(err)
 		return
 	}
 	defer domain.Free()
-	var x = MyTestFuncs{test:"asfasf"}
-
-	regId := ConnectDomainEventRegister(conn, domain, x)
-	fmt.Println(regId)
 
 
-	domain1, err := conn.LookupByName("cl5_n1_opensuse131")
-	if (err != nil) {
-		t.Error(err)
-		return
-	}
-	defer domain1.Free()
-
-	regId = ConnectDomainEventRegister(conn, domain1,  x)
+	var x MyTestFuncs = MyTestFuncs{}
+	regId = ConnectDomainEventRegister(conn, domain,  x)
 	fmt.Println(regId)
 
 	for {

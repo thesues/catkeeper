@@ -15,7 +15,7 @@ import (
 #include <libvirt/virterror.h>
 #include <stdlib.h>
 
-void EventCallBack(virConnectPtr c, virDomainPtr d, void * data);
+void EventCallBack(virConnectPtr c, virDomainPtr d, int event, int detail, void * data);
 void libvirt_eventcallback_cgo(virConnectPtr c, virDomainPtr d, int event, int detail, void * data);
 void VirFreeCallback(void *);
 void libvirt_virfreecalback_cgo(void *opaque);
@@ -24,7 +24,13 @@ import "C"
 
 
 const (
-	DOMAIN_LIFCYCLE = C.VIR_DOMAIN_EVENT_ID_LIFECYCLE
+      VIR_DOMAIN_EVENT_DEFINED  = int(C.VIR_DOMAIN_EVENT_DEFINED)
+      VIR_DOMAIN_EVENT_UNDEFINE = int(C.VIR_DOMAIN_EVENT_UNDEFINED)
+      VIR_DOMAIN_EVENT_STARTED  = int(C.VIR_DOMAIN_EVENT_STARTED)
+      VIR_DOMAIN_EVENT_SUSPENDE = int(C.VIR_DOMAIN_EVENT_SUSPENDED)
+      VIR_DOMAIN_EVENT_RESUMED  = int(C.VIR_DOMAIN_EVENT_RESUMED)
+      VIR_DOMAIN_EVENT_STOPPED  = int(C.VIR_DOMAIN_EVENT_STOPPED)
+      VIR_DOMAIN_EVENT_SHUTDOWN = int(C.VIR_DOMAIN_EVENT_SHUTDOWN)
 )
 
 type VirConnection struct {
@@ -508,22 +514,22 @@ func EventRunDefaultImpl() int {
 }
 
 type EventHandler interface{
-	EventHandle(conn VirConnection, domain VirDomain)
+	EventHandle(conn VirConnection, domain VirDomain, event int, detail int)
 	FreeHandle()
 }
 
 
 //export EventCallBack
-func EventCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, cData unsafe.Pointer) {
-	var p EventHandler = (interface{})(cData).(EventHandler)
-	p.EventHandle(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr})
+func EventCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, event C.int, detail C.int, cData unsafe.Pointer) {
+	var p *EventHandler = (*EventHandler)(cData)
+	(*p).EventHandle(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr}, int(event), int(detail))
 
 }
 
 //export VirFreeCallback
 func VirFreeCallback(cData unsafe.Pointer) {
-	var p EventHandler = (interface{})(cData).(EventHandler)
-	p.FreeHandle()
+	var p *EventHandler = (*EventHandler)(cData)
+	(*p).FreeHandle()
 }
 
 
