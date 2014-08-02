@@ -424,22 +424,23 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 
 	done := make(chan bool)
 	for _, host := range(hosts) {
-		if host.Existing {
-			go func(host *PhysicalMachine){
-				domains, _ := host.VirConn.ListAllDomains()
-				for _, virdomain := range domains {
-					vm := fillVmData(virdomain, conn)
-					if vm.Active == true {
-						vm.VNCAddress = host.IpAddress
-					}
-					//will not have any operations on vm, virdomain could be freeed
-					virdomain.Free()
-					host.VirtualMachines = append(host.VirtualMachines, &vm)
-				}
-				done <- true
-			}(host)
+		if host.Existing == false {
+			continue
 		}
 
+		go func(host *PhysicalMachine){
+			domains, _ := host.VirConn.ListAllDomains()
+			for _, virdomain := range domains {
+				vm := fillVmData(virdomain, conn)
+				if vm.Active == true {
+					vm.VNCAddress = host.IpAddress
+				}
+				//will not have any operations on vm, virdomain could be freeed
+				virdomain.Free()
+				host.VirtualMachines = append(host.VirtualMachines, &vm)
+			}
+			done <- true
+		}(host)
 	}
 	/* wait for all ListAllDomains finish */
 	for i:=0; i< numLiveHost ; i++ {
