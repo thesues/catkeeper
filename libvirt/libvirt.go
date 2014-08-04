@@ -38,8 +38,8 @@ const (
 
 
       /* event ID */
-      VIR_DOMAIN_EVENT_ID_LIFECYCLE = int(C.VIR_DOMAIN_EVENT_ID_LIFECYCLE)
-      VIR_DOMAIN_EVENT_ID_REBOOT = int(C.VIR_DOMAIN_EVENT_ID_REBOOT)
+      VIR_DOMAIN_EVENT_ID_LIFECYCLE = int(C.VIR_DOMAIN_EVENT_ID_LIFECYCLE) //LifeCycleCallBackType
+      VIR_DOMAIN_EVENT_ID_REBOOT = int(C.VIR_DOMAIN_EVENT_ID_REBOOT) //GenericCallBackType
 )
 
 type VirConnection struct {
@@ -527,10 +527,9 @@ type LifeCycleCallBackType func (c VirConnection, d VirDomain, event int , detai
 //export LifeCycleCallBack
 func LifeCycleCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, event C.int, detail C.int, cData unsafe.Pointer) {
 	var p *innerData= (*innerData)(cData)
-
 	//call types
-	var cb = p.userCallback.(LifeCycleCallBackType)
-	if cb == nil {
+	cb, ok := p.userCallback.(LifeCycleCallBackType)
+	if ok == false {
 		fmt.Println("can not use LifeCycleCallBackType")
 	}
 	cb(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr}, int(event), int(detail))
@@ -543,14 +542,12 @@ type GenericCallBackType func (c VirConnection, d VirDomain)
 //export GenericCallBack
 func GenericCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, cData unsafe.Pointer) {
 	var p *innerData= (*innerData)(cData)
-
 	//call types
-	var cb = p.userCallback.(GenericCallBackType)
-	if cb == nil {
+	cb,ok := p.userCallback.(GenericCallBackType)
+	if ok  == false {
 		fmt.Println("can not use LifeCycleCallBackType")
 	}
 	cb(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr})
-
 }
 
 
@@ -570,6 +567,17 @@ func ConnectDomainEventRegister(conn VirConnection,domain VirDomain, event int, 
 	}
 	var cb C.virConnectDomainEventGenericCallback
 	var myevent C.int
+	//check eventHandler
+	switch t := eventHandler.(type) {
+	case LifeCycleCallBackType:
+		break
+	case GenericCallBackType:
+		break
+	default:
+		fmt.Printf("Type error %v", t)
+		return -1
+	}
+
 	var data = innerData{userCallback:eventHandler}
 
 	switch event {

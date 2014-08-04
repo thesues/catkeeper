@@ -263,7 +263,10 @@ func monitorRebootcallback(c VirConnection, d VirDomain) {
 	fmt.Println("I see")
 }
 
-var monitor GenericCallBackType = monitorRebootcallback
+func monitorLifecallback(c VirConnection, d VirDomain , event int, detail int) {
+	fmt.Printf("%d happens",event)
+}
+
 
 func TestEventMonitor(t *testing.T) {
 	EventRegisterDefaultImpl()
@@ -272,7 +275,7 @@ func TestEventMonitor(t *testing.T) {
 		EventRunDefaultImpl()
 	}}()
 
-	conn, err := NewVirConnection("qemu+ssh://root@147.2.207.235/system")
+	conn, err := NewVirConnection("qemu+ssh:///system")
 	if (err != nil) {
 		t.Error(err)
 		return
@@ -281,7 +284,7 @@ func TestEventMonitor(t *testing.T) {
 
 	var regId int
 
-	domain, err := conn.LookupByName("dmzhang-osd1")
+	domain, err := conn.LookupByName("asdf")
 	if (err != nil) {
 		t.Error(err)
 		return
@@ -289,12 +292,19 @@ func TestEventMonitor(t *testing.T) {
 	defer domain.Free()
 
 
-	regId = ConnectDomainEventRegister(conn, domain,VIR_DOMAIN_EVENT_ID_REBOOT, monitor)
+	regId = ConnectDomainEventRegister(conn, domain,VIR_DOMAIN_EVENT_ID_REBOOT, (GenericCallBackType)(monitorRebootcallback))
+	if regId == -1 {
+		return
+	}
+	fmt.Println(regId)
+
+	regId = ConnectDomainEventRegister(conn, domain,VIR_DOMAIN_EVENT_ID_LIFECYCLE, (LifeCycleCallBackType)(monitorLifecallback))
+	if regId == -1 {
+		return
+	}
 	fmt.Println(regId)
 
 	for {
 		time.Sleep(1)
 	}
-
-
 }
