@@ -2,10 +2,10 @@ package main
 import (
 	"dmzhang/catkeeper/libvirt"
 	"dmzhang/catkeeper/vminstall"
+	"dmzhang/catkeeper/utils"
 	"fmt"
 	"flag"
 	"os/exec"
-	"encoding/xml"
 	"time"
 )
 
@@ -99,9 +99,9 @@ type listener struct {
 func (this *listener) FreeHandle() {
 }
 
-func (this *listener) EventHandle(conn VirConnection, domain VirDomain, event int, detail int) {
+func (this *listener) EventHandle(conn libvirt.VirConnection, domain libvirt.VirDomain, event int, detail int) {
 	fmt.Println(event)
-	if event ==  VIR_DOMAIN_EVENT_STOPPED {
+	if event ==  libvirt.VIR_DOMAIN_EVENT_STOPPED {
 		//to restart the domain
 		domain.Create()
 		this.quitchan <- true
@@ -132,16 +132,16 @@ func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress strin
 	fmt.Println("Running reboot listener")
 
 	go func(){
-		EventRegisterDefaultImpl()
+		libvirt.EventRegisterDefaultImpl()
 		// EventRunDefaultImpl has to be run before register. or no events caught,
 		// I do not know why
 		go func(){
 			for {
-			EventRunDefaultImpl()
+			libvirt.EventRunDefaultImpl()
 		}}()
 
 		l := listener{quiltchan}
-	        ConnectDomainEventRegister(conn, domain,  &l)
+	        libvirt.ConnectDomainEventRegister(conn, domain,  &l)
 		for {
 			time.Sleep(1)
 		}

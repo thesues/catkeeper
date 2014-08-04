@@ -2,8 +2,8 @@ package libvirt
 import (
 	"testing"
 	"fmt"
-	//"io/ioutil"
-	//"errors"
+	"io/ioutil"
+	"errors"
 	"time"
 )
 
@@ -257,25 +257,13 @@ func TestStreamTransfer(t *testing.T) {
 }
 
 
-/* event monitor */
-type MyTestFuncs struct {
-	test string
+/* reboot event monitor */
+
+func monitorRebootcallback(c VirConnection, d VirDomain) {
+	fmt.Println("I see")
 }
 
-func (this MyTestFuncs) EventHandle(conn VirConnection, domain VirDomain, event int, detail int) {
-	fmt.Println(event)
-	switch event {
-	case VIR_DOMAIN_EVENT_STARTED:
-		fmt.Println("Starting")
-	case VIR_DOMAIN_EVENT_STOPPED:
-		fallthrough
-	case VIR_DOMAIN_EVENT_SHUTDOWN:
-		fmt.Println("Shutdown")
-	}
-}
-
-func (this MyTestFuncs) FreeHandle() {
-}
+var monitor GenericCallBackType = monitorRebootcallback
 
 func TestEventMonitor(t *testing.T) {
 	EventRegisterDefaultImpl()
@@ -284,7 +272,7 @@ func TestEventMonitor(t *testing.T) {
 		EventRunDefaultImpl()
 	}}()
 
-	conn, err := NewVirConnection("qemu+ssh:///system")
+	conn, err := NewVirConnection("qemu+ssh://root@147.2.207.235/system")
 	if (err != nil) {
 		t.Error(err)
 		return
@@ -293,7 +281,7 @@ func TestEventMonitor(t *testing.T) {
 
 	var regId int
 
-	domain, err := conn.LookupByName("asdf")
+	domain, err := conn.LookupByName("dmzhang-osd1")
 	if (err != nil) {
 		t.Error(err)
 		return
@@ -301,8 +289,7 @@ func TestEventMonitor(t *testing.T) {
 	defer domain.Free()
 
 
-	var x MyTestFuncs = MyTestFuncs{}
-	regId = ConnectDomainEventRegister(conn, domain,  x)
+	regId = ConnectDomainEventRegister(conn, domain,VIR_DOMAIN_EVENT_ID_REBOOT, monitor)
 	fmt.Println(regId)
 
 	for {
