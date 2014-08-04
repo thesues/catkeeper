@@ -93,20 +93,6 @@ func main() {
 	startVNCviewer(conn, name, *hostPtr, quiltChan)
 }
 
-type listener struct {
-	quitchan chan bool
-}
-func (this *listener) FreeHandle() {
-}
-
-func (this *listener) EventHandle(conn libvirt.VirConnection, domain libvirt.VirDomain, event int, detail int) {
-	fmt.Println(event)
-	if event ==  libvirt.VIR_DOMAIN_EVENT_STOPPED {
-		//to restart the domain
-		domain.Create()
-		this.quitchan <- true
-	}
-}
 
 func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress string, quiltchan chan bool) {
 	fmt.Println("would bring up vncviewer...")
@@ -140,8 +126,14 @@ func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress strin
 			libvirt.EventRunDefaultImpl()
 		}}()
 
-		l := listener{quiltchan}
-	        libvirt.ConnectDomainEventRegister(conn, domain,  &l)
+		var autoreboot libvirt.GenericCallBackType = func(c libvirt.VirConnection, d libvirt.VirDomain){
+			fmt.Println("rebooting")
+			d.Create()
+			quiltchan <- true
+
+		}
+	        libvirt.ConnectDomainEventRegister(conn, domain, libvirt.VIR_DOMAIN_EVENT_ID_REBOOT, autoreboot)
+
 		for {
 			time.Sleep(1)
 		}
