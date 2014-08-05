@@ -69,6 +69,7 @@ func main() {
 	fmt.Printf("AutoYast     :%s \n" , autoinst)
 
 
+	startListen()
 	// create remote pool
 	fmt.Printf("Creating connection to %s\n", *hostPtr)
 	conn, err := libvirt.NewVirConnection(remoteURL)
@@ -94,6 +95,22 @@ func main() {
 }
 
 
+func startListen() {
+	fmt.Println("Running reboot listener")
+	libvirt.EventRegisterDefaultImpl()
+	// EventRunDefaultImpl has to be run before register. or no events caught,
+	// I do not know why
+	go func(){
+		for {
+			ret := libvirt.EventRunDefaultImpl()
+			if ret == -1 {
+				fmt.Println("RuN failed")
+				break
+			}
+	}}()
+
+}
+
 func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress string, quiltchan chan bool) {
 	fmt.Println("would bring up vncviewer...")
 	var domain libvirt.VirDomain
@@ -115,29 +132,23 @@ func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress strin
 	}
 
 	vncPort =  v.Devices.Graphics.VNCPort
-	fmt.Println("Running reboot listener")
 
-	go func(){
-		libvirt.EventRegisterDefaultImpl()
-		// EventRunDefaultImpl has to be run before register. or no events caught,
-		// I do not know why
-		go func(){
-			for {
-			libvirt.EventRunDefaultImpl()
-		}}()
-
-		var autoreboot libvirt.GenericCallBackType = func(c libvirt.VirConnection, d libvirt.VirDomain){
-			fmt.Println("rebooting")
+	//register an event
+	var autoreboot libvirt.LifeCycleCallBackType = func(c libvirt.VirConnection, d libvirt.VirDomain, event int, detail int){
+		fmt.Printf("Got event %d\n", event)
+		if event == libvirt.VIR_DOMAIN_EVENT_STOPPED {
+			fmt.Println("rebooting...")
 			d.Create()
 			quiltchan <- true
-
 		}
-	        libvirt.ConnectDomainEventRegister(conn, domain, libvirt.VIR_DOMAIN_EVENT_ID_REBOOT, autoreboot)
+	}
 
-		for {
-			time.Sleep(1)
-		}
-	}()
+	ret := libvirt.ConnectDomainEventRegister(conn, domain, libvirt.VIR_DOMAIN_EVENT_ID_LIFECYCLE, autoreboot)
+	if ret == -1 {
+		fmt.Println("can not autoreboot")
+		return
+	}
+
 
 	fmt.Println("RUNNING: vncviewer " + hostIPAddress + ":" + vncPort)
 	go func() {
@@ -149,6 +160,8 @@ func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress strin
 			fmt.Println(err)
 			return
 		}
+		fmt.Println("vncviewer is quiting")
+		time.Sleep(10 * time.Second)
 		quiltchan <- true
 	}()
 

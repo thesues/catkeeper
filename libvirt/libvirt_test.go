@@ -275,7 +275,7 @@ func TestEventMonitor(t *testing.T) {
 		EventRunDefaultImpl()
 	}}()
 
-	conn, err := NewVirConnection("qemu+ssh:///system")
+	conn, err := NewVirConnection("qemu+ssh://root@147.2.207.235/system")
 	if (err != nil) {
 		t.Error(err)
 		return
@@ -284,7 +284,7 @@ func TestEventMonitor(t *testing.T) {
 
 	var regId int
 
-	domain, err := conn.LookupByName("asdf")
+	domain, err := conn.LookupByName("dmzhang-osd1")
 	if (err != nil) {
 		t.Error(err)
 		return

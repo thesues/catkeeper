@@ -531,6 +531,7 @@ func LifeCycleCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, event C.int, d
 	cb, ok := p.userCallback.(LifeCycleCallBackType)
 	if ok == false {
 		fmt.Println("can not use LifeCycleCallBackType")
+		return
 	}
 	cb(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr}, int(event), int(detail))
 }
@@ -545,7 +546,8 @@ func GenericCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, cData unsafe.Poi
 	//call types
 	cb,ok := p.userCallback.(GenericCallBackType)
 	if ok  == false {
-		fmt.Println("can not use LifeCycleCallBackType")
+		fmt.Println("can not use GenericCallBackType")
+		return
 	}
 	cb(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr})
 }
