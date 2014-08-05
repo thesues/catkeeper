@@ -11,12 +11,36 @@ import (
 
 /*
 #cgo LDFLAGS: -lvirt -ldl
+
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
 #include <stdlib.h>
+
+void GenericCallBack(virConnectPtr, virDomainPtr, void *);
+void LifeCycleCallBack(virConnectPtr, virDomainPtr, int, int, void *);
+void VirFreeCallback(void *);
+void libvirt_generic_eventcallback_cgo(virConnectPtr c, virDomainPtr d, int event, int detail, void * data);
+void libvirt_lifecycle_eventcallback_cgo(virConnectPtr c, virDomainPtr d, int event, int detail, void * data);
+void libvirt_virfreecalback_cgo(void *opaque);
 */
 import "C"
 
+
+const (
+      /*type for lifecycle*/
+      VIR_DOMAIN_EVENT_DEFINED  = int(C.VIR_DOMAIN_EVENT_DEFINED)
+      VIR_DOMAIN_EVENT_UNDEFINE = int(C.VIR_DOMAIN_EVENT_UNDEFINED)
+      VIR_DOMAIN_EVENT_STARTED  = int(C.VIR_DOMAIN_EVENT_STARTED)
+      VIR_DOMAIN_EVENT_SUSPENDE = int(C.VIR_DOMAIN_EVENT_SUSPENDED)
+      VIR_DOMAIN_EVENT_RESUMED  = int(C.VIR_DOMAIN_EVENT_RESUMED)
+      VIR_DOMAIN_EVENT_STOPPED  = int(C.VIR_DOMAIN_EVENT_STOPPED)
+      VIR_DOMAIN_EVENT_SHUTDOWN = int(C.VIR_DOMAIN_EVENT_SHUTDOWN)
+
+
+      /* event ID */
+      VIR_DOMAIN_EVENT_ID_LIFECYCLE = int(C.VIR_DOMAIN_EVENT_ID_LIFECYCLE) //LifeCycleCallBackType
+      VIR_DOMAIN_EVENT_ID_REBOOT = int(C.VIR_DOMAIN_EVENT_ID_REBOOT) //GenericCallBackType
+)
 
 type VirConnection struct {
 	ptr C.virConnectPtr
@@ -30,7 +54,6 @@ type VirDomain struct {
 type VirStream struct {
 	ptr C.virStreamPtr
 }
-
 
 func (c *VirConnection) StreamNew() (VirStream,error) {
 	ptr := C.virStreamNew(c.ptr, 0);
@@ -449,15 +472,6 @@ func (p *VirStoragePool) IsActive() bool{
 		return false
 	}
 }
-/*
-func (p *VirStoragePool) Free() error {
-	result := C.virStoragePoolFree(p.ptr)
-	if result < 0 {
-		return errors.New(GetLastError())
-	}
-	return nil
-}
-*/
 
 type VirStorageVol struct {
 	ptr C.virStorageVolPtr
@@ -490,4 +504,97 @@ func (v *VirStorageVol) Delete() error {
 		return errors.New(GetLastError())
 	}
 	return nil
+}
+
+
+// event callbacks
+
+func  EventRegisterDefaultImpl() error {
+	result := C.virEventRegisterDefaultImpl()
+	if result == -1 {
+		return errors.New(GetLastError())
+	}
+	return nil
+}
+
+func EventRunDefaultImpl() int {
+	result := C.virEventRunDefaultImpl()
+	return int(result)
+}
+
+
+type LifeCycleCallBackType func (c VirConnection, d VirDomain, event int , detail int )
+//export LifeCycleCallBack
+func LifeCycleCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, event C.int, detail C.int, cData unsafe.Pointer) {
+	var p *innerData= (*innerData)(cData)
+	//call types
+	cb, ok := p.userCallback.(LifeCycleCallBackType)
+	if ok == false {
+		fmt.Println("can not use LifeCycleCallBackType")
+		return
+	}
+	cb(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr}, int(event), int(detail))
+}
+
+
+
+type GenericCallBackType func (c VirConnection, d VirDomain)
+
+//export GenericCallBack
+func GenericCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, cData unsafe.Pointer) {
+	var p *innerData= (*innerData)(cData)
+	//call types
+	cb,ok := p.userCallback.(GenericCallBackType)
+	if ok  == false {
+		fmt.Println("can not use GenericCallBackType")
+		return
+	}
+	cb(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr})
+}
+
+
+
+//export VirFreeCallback
+func VirFreeCallback(cData unsafe.Pointer) {
+}
+
+type innerData struct {
+	userCallback interface{}
+}
+
+func ConnectDomainEventRegister(conn VirConnection,domain VirDomain, event int, eventHandler interface{}) int {
+	if eventHandler == nil {
+		fmt.Println("wrong")
+		return -1
+	}
+	var cb C.virConnectDomainEventGenericCallback
+	var myevent C.int
+	//check eventHandler
+	switch t := eventHandler.(type) {
+	case LifeCycleCallBackType:
+		break
+	case GenericCallBackType:
+		break
+	default:
+		fmt.Printf("Type error %v", t)
+		return -1
+	}
+
+	var data = innerData{userCallback:eventHandler}
+
+	switch event {
+		case VIR_DOMAIN_EVENT_ID_LIFECYCLE:
+			cb = C.virConnectDomainEventGenericCallback(C.libvirt_lifecycle_eventcallback_cgo)
+			myevent = C.VIR_DOMAIN_EVENT_ID_LIFECYCLE
+		case VIR_DOMAIN_EVENT_ID_REBOOT:
+			cb = C.virConnectDomainEventGenericCallback(C.libvirt_generic_eventcallback_cgo)
+			myevent = C.VIR_DOMAIN_EVENT_ID_REBOOT
+	}
+
+	r := C.virConnectDomainEventRegisterAny(conn.ptr, domain.ptr, myevent,
+				cb,
+				unsafe.Pointer(&data),
+				(C.virFreeCallback)(C.libvirt_virfreecalback_cgo))
+	result := int(r)
+	return result
 }

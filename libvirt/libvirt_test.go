@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"errors"
+	"time"
 )
 
 func TestNewVirConnection(t *testing.T) {
@@ -253,4 +254,57 @@ func TestStreamTransfer(t *testing.T) {
 	}
 	fmt.Println("Finish Send Data...")
 
+}
+
+
+/* reboot event monitor */
+
+func monitorRebootcallback(c VirConnection, d VirDomain) {
+	fmt.Println("I see")
+}
+
+func monitorLifecallback(c VirConnection, d VirDomain , event int, detail int) {
+	fmt.Printf("%d happens",event)
+}
+
+
+func TestEventMonitor(t *testing.T) {
+	EventRegisterDefaultImpl()
+	go func(){
+		for {
+		EventRunDefaultImpl()
+	}}()
+
+	conn, err := NewVirConnection("qemu+ssh://root@147.2.207.235/system")
+	if (err != nil) {
+		t.Error(err)
+		return
+	}
+	defer conn.CloseConnection()
+
+	var regId int
+
+	domain, err := conn.LookupByName("dmzhang-osd1")
+	if (err != nil) {
+		t.Error(err)
+		return
+	}
+	defer domain.Free()
+
+
+	regId = ConnectDomainEventRegister(conn, domain,VIR_DOMAIN_EVENT_ID_REBOOT, (GenericCallBackType)(monitorRebootcallback))
+	if regId == -1 {
+		return
+	}
+	fmt.Println(regId)
+
+	regId = ConnectDomainEventRegister(conn, domain,VIR_DOMAIN_EVENT_ID_LIFECYCLE, (LifeCycleCallBackType)(monitorLifecallback))
+	if regId == -1 {
+		return
+	}
+	fmt.Println(regId)
+
+	for {
+		time.Sleep(1)
+	}
 }

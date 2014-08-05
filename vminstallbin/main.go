@@ -2,10 +2,11 @@ package main
 import (
 	"dmzhang/catkeeper/libvirt"
 	"dmzhang/catkeeper/vminstall"
+	"dmzhang/catkeeper/utils"
 	"fmt"
 	"flag"
 	"os/exec"
-	"encoding/xml"
+	"time"
 )
 
 func usage() {
@@ -68,6 +69,7 @@ func main() {
 	fmt.Printf("AutoYast     :%s \n" , autoinst)
 
 
+	startListen()
 	// create remote pool
 	fmt.Printf("Creating connection to %s\n", *hostPtr)
 	conn, err := libvirt.NewVirConnection(remoteURL)
@@ -82,17 +84,34 @@ func main() {
 
 	go vminstall.VmInstall(conn, name, repo, autoinst, uint64(imageSize), ch)
 
+	var quiltChan = make(chan bool)
 	for m := range ch {
 		if m == vminstall.VMINSTALL_SUCCESS {
-			startVNCviewer(conn, name, *hostPtr)
-		} else {
-			fmt.Println(m)
+			break
 		}
+		fmt.Println(m)
 	}
+	startVNCviewer(conn, name, *hostPtr, quiltChan)
 }
 
 
-func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress string) {
+func startListen() {
+	fmt.Println("Running reboot listener")
+	libvirt.EventRegisterDefaultImpl()
+	// EventRunDefaultImpl has to be run before register. or no events caught,
+	// I do not know why
+	go func(){
+		for {
+			ret := libvirt.EventRunDefaultImpl()
+			if ret == -1 {
+				fmt.Println("RuN failed")
+				break
+			}
+	}}()
+
+}
+
+func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress string, quiltchan chan bool) {
 	fmt.Println("would bring up vncviewer...")
 	var domain libvirt.VirDomain
 	domain ,err := conn.LookupByName(name)
@@ -111,14 +130,41 @@ func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress strin
 		fmt.Println("FAIL:Can not get vnc port")
 		return
 	}
+
 	vncPort =  v.Devices.Graphics.VNCPort
-	fmt.Println("RUNNING: vncviewer " + hostIPAddress + ":" + vncPort)
-	cmd := exec.Command("vncviewer", hostIPAddress + ":" + vncPort)
-	err = cmd.Start()
-	if err != nil {
-		fmt.Println("FAIL:can not start vncviewer")
-		fmt.Println(err)
+
+	//register an event
+	var autoreboot libvirt.LifeCycleCallBackType = func(c libvirt.VirConnection, d libvirt.VirDomain, event int, detail int){
+		fmt.Printf("Got event %d\n", event)
+		if event == libvirt.VIR_DOMAIN_EVENT_STOPPED {
+			fmt.Println("rebooting...")
+			d.Create()
+			quiltchan <- true
+		}
+	}
+
+	ret := libvirt.ConnectDomainEventRegister(conn, domain, libvirt.VIR_DOMAIN_EVENT_ID_LIFECYCLE, autoreboot)
+	if ret == -1 {
+		fmt.Println("can not autoreboot")
 		return
 	}
 
+
+	fmt.Println("RUNNING: vncviewer " + hostIPAddress + ":" + vncPort)
+	go func() {
+		cmd := exec.Command("vncviewer", hostIPAddress + ":" + vncPort)
+		//Run will block
+		err = cmd.Run()
+		if err != nil {
+			fmt.Println("FAIL:can not start vncviewer")
+			fmt.Println(err)
+			return
+		}
+		fmt.Println("vncviewer is quiting")
+		time.Sleep(10 * time.Second)
+		quiltchan <- true
+	}()
+
+	//either get reboot event or user quit the vncviewer gui, this application will quit
+	<-quiltchan
 }
