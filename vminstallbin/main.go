@@ -84,14 +84,13 @@ func main() {
 
 	go vminstall.VmInstall(conn, name, repo, autoinst, uint64(imageSize), ch)
 
-	var quiltChan = make(chan bool)
 	for m := range ch {
 		if m == vminstall.VMINSTALL_SUCCESS {
 			break
 		}
 		fmt.Println(m)
 	}
-	startVNCviewer(conn, name, *hostPtr, quiltChan)
+	startVNCviewer(conn, name, *hostPtr)
 }
 
 
@@ -111,7 +110,18 @@ func startListen() {
 
 }
 
-func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress string, quiltchan chan bool) {
+//register an event
+func myrebootcallback(c libvirt.VirConnection, d libvirt.VirDomain, event int, detail int){
+	fmt.Printf("Got event %d\n", event)
+	if event == libvirt.VIR_DOMAIN_EVENT_STOPPED {
+		fmt.Println("rebooting...")
+		d.Create()
+	}
+}
+
+
+
+func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress string) {
 	fmt.Println("would bring up vncviewer...")
 	var domain libvirt.VirDomain
 	domain ,err := conn.LookupByName(name)
@@ -133,38 +143,27 @@ func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress strin
 
 	vncPort =  v.Devices.Graphics.VNCPort
 
-	//register an event
-	var autoreboot libvirt.LifeCycleCallBackType = func(c libvirt.VirConnection, d libvirt.VirDomain, event int, detail int){
-		fmt.Printf("Got event %d\n", event)
-		if event == libvirt.VIR_DOMAIN_EVENT_STOPPED {
-			fmt.Println("rebooting...")
-			d.Create()
-			quiltchan <- true
-		}
-	}
 
-	ret := libvirt.ConnectDomainEventRegister(conn, domain, libvirt.VIR_DOMAIN_EVENT_ID_LIFECYCLE, autoreboot)
+
+	ret := libvirt.ConnectDomainEventRegister(conn, domain, libvirt.VIR_DOMAIN_EVENT_ID_LIFECYCLE, libvirt.LifeCycleCallBackType(myrebootcallback))
 	if ret == -1 {
 		fmt.Println("can not autoreboot")
 		return
 	}
 
 
-	fmt.Println("RUNNING: vncviewer " + hostIPAddress + ":" + vncPort)
-	go func() {
-		cmd := exec.Command("vncviewer", hostIPAddress + ":" + vncPort)
-		//Run will block
-		err = cmd.Run()
-		if err != nil {
-			fmt.Println("FAIL:can not start vncviewer")
-			fmt.Println(err)
-			return
-		}
-		fmt.Println("vncviewer is quiting")
-		time.Sleep(10 * time.Second)
-		quiltchan <- true
-	}()
 
-	//either get reboot event or user quit the vncviewer gui, this application will quit
-	<-quiltchan
+	fmt.Println("RUNNING: vncviewer " + hostIPAddress + ":" + vncPort)
+
+	cmd := exec.Command("vncviewer", hostIPAddress + ":" + vncPort)
+	//Run will block
+	err = cmd.Run()
+	if err != nil {
+		fmt.Println("FAIL:can not start vncviewer")
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("vncviewer is quiting")
+	time.Sleep(1 * time.Second)
+
 }

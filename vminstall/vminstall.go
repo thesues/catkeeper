@@ -285,6 +285,7 @@ func VmInstall(conn libvirt.VirConnection, vmname string, url string, autoyast s
 		return
 	}
 	defer linuxVolume.Free()
+	defer linuxVolume.Delete()
 	linuxPath, _ := linuxVolume.GetPath()
 
 
@@ -295,6 +296,7 @@ func VmInstall(conn libvirt.VirConnection, vmname string, url string, autoyast s
 		return
 	}
 	defer initrdVolume.Free()
+	defer initrdVolume.Delete()
 	initrdPath, _ := initrdVolume.GetPath()
 
 
@@ -380,8 +382,6 @@ func VmInstall(conn libvirt.VirConnection, vmname string, url string, autoyast s
 		return
 	}
 
-	defer linuxVolume.Delete()
-	defer initrdVolume.Delete()
 
 	/* change xml a bit using regex lines, I do not want to parse the xml file
 	* 1. change os section to boot from hd
