@@ -19,8 +19,8 @@ import (
 void GenericCallBack(virConnectPtr, virDomainPtr, void *);
 void LifeCycleCallBack(virConnectPtr, virDomainPtr, int, int, void *);
 void VirFreeCallback(void *);
-void libvirt_generic_eventcallback_cgo(virConnectPtr c, virDomainPtr d, int event, int detail, void * data);
-void libvirt_lifecycle_eventcallback_cgo(virConnectPtr c, virDomainPtr d, int event, int detail, void * data);
+int libvirt_generic_eventcallback_cgo(virConnectPtr c, virDomainPtr d, int event, int detail, void * data);
+int libvirt_lifecycle_eventcallback_cgo(virConnectPtr c, virDomainPtr d, int event, int detail, void * data);
 void libvirt_virfreecalback_cgo(void *opaque);
 */
 import "C"
@@ -529,8 +529,9 @@ func LifeCycleCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, event C.int, d
 	var p *innerData= (*innerData)(cData)
 	//call types
 	cb, ok := p.userCallback.(LifeCycleCallBackType)
+
 	if ok == false {
-		fmt.Println("can not use LifeCycleCallBackType")
+		fmt.Printf("can not use LifeCycleCallBackType %T",p.userCallback)
 		return
 	}
 	cb(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr}, int(event), int(detail))
@@ -546,7 +547,7 @@ func GenericCallBack(cPtr C.virConnectPtr, vPtr C.virDomainPtr, cData unsafe.Poi
 	//call types
 	cb,ok := p.userCallback.(GenericCallBackType)
 	if ok  == false {
-		fmt.Println("can not use GenericCallBackType")
+		fmt.Println("can not use GenericCallBackType %T", p.userCallback)
 		return
 	}
 	cb(VirConnection{ptr:cPtr}, VirDomain{ptr:vPtr})
@@ -562,25 +563,28 @@ type innerData struct {
 	userCallback interface{}
 }
 
+
+var gcMap = make(map[*innerData] bool)
+
 func ConnectDomainEventRegister(conn VirConnection,domain VirDomain, event int, eventHandler interface{}) int {
-	if eventHandler == nil {
-		fmt.Println("wrong")
-		return -1
-	}
+
 	var cb C.virConnectDomainEventGenericCallback
 	var myevent C.int
 	//check eventHandler
-	switch t := eventHandler.(type) {
+	switch eventHandler.(type) {
 	case LifeCycleCallBackType:
 		break
 	case GenericCallBackType:
 		break
 	default:
-		fmt.Printf("Type error %v", t)
+		fmt.Printf("Type error %T", eventHandler)
 		return -1
 	}
 
 	var data = innerData{userCallback:eventHandler}
+
+	gcMap[&data] = true
+
 
 	switch event {
 		case VIR_DOMAIN_EVENT_ID_LIFECYCLE:
@@ -590,6 +594,7 @@ func ConnectDomainEventRegister(conn VirConnection,domain VirDomain, event int, 
 			cb = C.virConnectDomainEventGenericCallback(C.libvirt_generic_eventcallback_cgo)
 			myevent = C.VIR_DOMAIN_EVENT_ID_REBOOT
 	}
+
 
 	r := C.virConnectDomainEventRegisterAny(conn.ptr, domain.ptr, myevent,
 				cb,
