@@ -91,6 +91,8 @@ func main() {
 		fmt.Println(m)
 	}
 	startVNCviewer(conn, name, *hostPtr)
+
+
 }
 
 
@@ -164,6 +166,9 @@ func startVNCviewer(conn libvirt.VirConnection, name string, hostIPAddress strin
 		return
 	}
 	fmt.Println("vncviewer is quiting")
-	time.Sleep(1 * time.Second)
+	time.Sleep(3 * time.Second)
+
+	//re run vncviewer
+	cmd.Run()
 
 }
