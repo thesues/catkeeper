@@ -254,7 +254,6 @@ func proxyHandler(ws *websocket.Conn) {
 		return
 	}
 	defer vc.Close()
-	log.Println("new connection")
 	done := make(chan bool)
 
 	go func() {
@@ -300,7 +299,6 @@ func proxyHandler(ws *websocket.Conn) {
 	case <-done:
 		break
 	}
-	log.Println("finish connection")
 }
 
 func CreateVirtualMachine() chan string {
