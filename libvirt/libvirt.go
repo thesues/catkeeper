@@ -419,6 +419,16 @@ func (c * VirConnection) StoragePoolDefineXML(xml string) (VirStoragePool, error
 }
 
 
+func (conn *VirConnection) LookupStorageVolByPath(name string) (VirStorageVol, error) {
+	cName := C.CString(name)
+	defer C.free(unsafe.Pointer(cName))
+	ptr := C.virStorageVolLookupByPath(conn.ptr, cName)
+	if ptr == nil {
+		return VirStorageVol{}, errors.New(GetLastError())
+	}
+	return VirStorageVol{ptr: ptr}, nil
+}
+
 func (p *VirStoragePool) Create() error {
 	result := C.virStoragePoolCreate(p.ptr, 0)
 	if result < 0 {

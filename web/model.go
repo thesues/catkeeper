@@ -79,17 +79,11 @@ func (this *VirtualMachine) Start() error{
 }
 
 func (this *VirtualMachine) Delete(db *sql.DB) error {
-	this.VirDomain.Destroy()
-	//get storage pool
-	pool, err := this.Connect.StoragePoolLookupByName("default")
-	if err != nil {
-		return err
-	}
-	defer pool.Free()
 
 	for _, diskpath := range this.Disks {
 
-		v, err := pool.LookupStorageVolByName(diskpath)
+		log.Printf("deleteing disk %s", diskpath)
+		v, err := this.Connect.LookupStorageVolByPath(diskpath)
 		if err != nil {
 			log.Printf("%s can not be found by libvirt",diskpath)
 			continue
@@ -100,7 +94,7 @@ func (this *VirtualMachine) Delete(db *sql.DB) error {
 	}
 
 	//remove domain
-	err = this.VirDomain.Delete()
+	err := this.VirDomain.Delete()
 	if err != nil {
 		return err
 	}
