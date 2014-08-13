@@ -17,6 +17,9 @@
   <div id="display" class="container">
   </div>
 
+  <div class="modal fade" id="vm_edit_div" tabindex="-1" role="dialog-modal" aria-labelledby="myModalLabel" aria-hidden="true">
+  </div>
+
   <script src="include/LAB.js" type="text/javascript"></script>
 
   <script id="host-begin" type="text/x-handlebars-template">
@@ -41,9 +44,37 @@
   <td>{{Owner}} </td>
   <td>{{Description}} </td>
   <td>
-  	<a href="/vm/{{Id}}" class="btn btn-success btn-xs active" role="button">EDIT</a>
+	<button type="button" onclick="display_vm_edit({{Id}})" class="btn btn-success btn-xs active" role="button">EDIT</button>
   </td>
   </tr>
+  </script>
+
+  <script id="vm_edit_script" type="text/x-handlebars-template">
+  	<!-- Modal -->
+	<div class="modal-dialog">
+		<div class="modal-content">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+				<h2 class="modal-title" id="myModalLabel" align="center">{{Name}}</h2>
+			</div>
+			<div class="modal-body">
+					<h3><span class="label label-default">Owner</span></h3>
+					<input id="vm_owner" type="text" class="form-control" placeholder="{{Owner}}">
+					<h3><span class="label label-default">Description</span></h3>
+					<input id="vm_description" type="text" class="form-control" placeholder="{{Description}}">
+			</div>
+			<div class="modal-footer">
+				{{#if Active}}
+				<button type="button" class="btn btn-primary" onclick="submit_edit(2, {{Id}})" data-dismiss="modal">Stop</button>
+				<button type="button" class="btn btn-primary" onclick="submit_edit(3, {{Id}})" data-dismiss="modal">Force Stop</button>
+				{{else}}
+				<button type="button" class="btn btn-primary" onclick="submit_edit(1, {{Id}})" data-dismiss="modal">Start</button>
+				{{/if}}
+				<button type="button" class="btn btn-primary" onclick="submit_edit(4, {{Id}})" data-dismiss="modal">Update</button>
+				<button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+			</div>
+		</div>
+	</div>
   </script>
 
   <script id="host-end" type="text/x-handlebars-template">
@@ -150,6 +181,8 @@
 
 	function query()
 	{
+			//currently, disable local cache.
+			gall = null;
 	    if(null == gall)
 		{
 				var response = $.get("api/list");
@@ -162,6 +195,69 @@
 		{
 				display(gall);
 		}
+	}
+
+	function submit_edit(type, vm_id)
+	{
+			var submit_type="";
+			var owner = document.getElementById("vm_owner");
+			var desc = document.getElementById("vm_description");
+
+			switch(type)
+			{
+					case 1:
+							submit_type = "Start";
+							break;
+					case 2:
+							submit_type = "Stop";
+							break;
+					case 3:
+							submit_type = "ForceStop";
+							break;
+					case 4:
+							submit_type = "Update";
+							break;
+					default:
+							submit_type = "Unknown";
+							break;
+			}
+
+			if("" == owner.value)
+					owner.value = owner.placeholder;
+			if("" == desc.value)
+					desc.value = desc.placeholder;
+
+			$.post("vm/" + vm_id, {id: vm_id,
+							submit: submit_type,
+							Owner: owner.value,
+							Description: desc.value}
+				  ).done(function(){
+						  query();
+						  })
+					.fail(function(){
+						  alert("failed to submit change for vm " + vm_id);
+						  });
+	}
+
+	function show_edit(data)
+	{
+			var vm_edit_div = document.getElementById("vm_edit_div");
+			vm_edit_div.innerHTML = "";
+			var vm_edit_div_template = Handlebars.compile($("#vm_edit_script").html());
+			vm_edit_div.innerHTML = vm_edit_div_template(data);
+			$('#vm_edit_div').modal({
+							backdrop:"static"
+							});
+			//clear the vm edit div html contents so that other vm edit can be displayed correctly.
+	}
+
+	function display_vm_edit(vm_id)
+	{
+			var response = $.get("api/vm/" + vm_id);
+			response.done(show_edit);
+			response.fail(function(){
+							alert("failed to get vm information for " + vm_id);
+							});
 	}
 
   	function init()
@@ -177,6 +273,7 @@
 	}
 	$LAB.script("https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js")
 	//.script("//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js")
+	.script("//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js")
 	.script("http://builds.handlebarsjs.com.s3.amazonaws.com/handlebars-v1.3.0.js").wait(function(){
 					$(document).ready(init);
 					});
