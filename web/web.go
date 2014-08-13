@@ -178,6 +178,13 @@ func main() {
 	    r.JSON(200, pm)
     })
 
+    m.Get("/api/vm/(?P<id>[0-9]+)", func(r render.Render, params martini.Params){
+	    id,_ := strconv.Atoi(params["id"])
+	    vm := getVirtualMachine(db,id)
+	    r.JSON(200, vm)
+    })
+
+
     vncProxy := websocket.Server{Handler:proxyHandler,
 			    Handshake: func(ws *websocket.Config, req *http.Request) error {
 			    ws.Protocol = []string{"base64"}
