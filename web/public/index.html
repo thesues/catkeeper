@@ -69,6 +69,7 @@
 				<button type="button" class="btn btn-primary" onclick="submit_edit(3, {{Id}})" data-dismiss="modal">Force Stop</button>
 				{{else}}
 				<button type="button" class="btn btn-primary" onclick="submit_edit(1, {{Id}})" data-dismiss="modal">Start</button>
+				<button type="button" class="btn btn-primary" onclick="submit_edit(5, {{Id}})" data-dismiss="modal">Delete</button>
 				{{/if}}
 				<button type="button" class="btn btn-primary" onclick="submit_edit(4, {{Id}})" data-dismiss="modal">Update</button>
 				<button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
@@ -217,6 +218,15 @@
 					case 4:
 							submit_type = "Update";
 							break;
+					case 5:
+							$.post("vm/delete/" + vm_id)
+									.done(function(){
+													query();
+													})
+									.fail(function(){
+													alert("failed to delete vm " + vm_id);
+													});
+							return;
 					default:
 							submit_type = "Unknown";
 							break;
