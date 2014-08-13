@@ -3,8 +3,6 @@
 	<head>
 		<meta charset="utf-8">
 		<script src="include/util.js"></script>
-	</head>
-	<body>
 		<script type="text/javascript">
 			Util.load_scripts(["webutil.js"]);
 
@@ -16,7 +14,8 @@
 
 				var wsuri = "ws://127.0.0.1:3000/installsockify?token="+token;
 
-				var ready_to_jump = false
+				var install_failed = false;
+				var install_success = false;
 
 				console.log("onload");
 
@@ -24,6 +23,7 @@
 
 				sock.onopen = function() {
 					console.log("connected to " + wsuri);
+					document.getElementById('msg').innerHTML = "connected to remote host"
 				}
 
 				sock.onclose = function(e) {
@@ -31,16 +31,28 @@
 				}
 
 				sock.onmessage = function(e) {
-					console.log("message received: " + e.data);
-					if (e.data == "CLOSE") {
-						ready_to_jump = true
-					} else if (ready_to_jump == true) {
-						console.log("INFORMATION received: " + e.data);
-						//than jump
+					console.log(e.data);
+					document.getElementById('msg').innerHTML = e.data;
+					if (e.data == "FAIL") {
+						//the next message would be failed reason
+						install_failed = true;
+					} else if (e.data == "SUCCESS") {
+						// the next message would be vnc address
+						install_success = true;
+					}	
+					else if (install_success == true) {
+						document.getElementById('msg').innerHTML = "jumping to vnc console ..."
+						window.location.href = e.data;
+
+					}else if (install_failed == true) {
+						document.write("install failed");
 					}
 				}
 			};
 
 		</script>
+	</head>
+	<body>
+	<div id=msg>message</div>
 </body>
 <html>

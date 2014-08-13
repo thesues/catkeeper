@@ -17,9 +17,20 @@ import (
 	"sync/atomic"
 	"code.google.com/p/go-uuid/uuid"
 	"dmzhang/catkeeper/utils"
+	"dmzhang/catkeeper/libvirt"
+	"dmzhang/catkeeper/vminstall"
+	"strings"
 )
 
 var tokenMap = utils.NewSafeMap()
+
+
+type TokenContentForVMInstall struct {
+	Ch chan string
+	Name string
+	Conn libvirt.VirConnection
+	IPAddress string
+}
 
 //TODO move all sql to model.go
 func main() {
@@ -68,13 +79,36 @@ func main() {
     })
 
     m.Post("/create", func(r render.Render, req *http.Request) {
-	    //get req
-	    //host
-	    //name
-            m := CreateVirtualMachine()
-	    //generate token
+
+	    name     := req.PostFormValue("Name")
+	    ip       := req.PostFormValue("IpAddress")
+	    repo     := req.PostFormValue("repo")
+	    diskSize := req.PostFormValue("disk")
+	    autoinst := req.PostFormValue("autoinst")
+	    //check input data
+	    imageSize, err := strconv.Atoi(diskSize)
+	    if err != nil {
+		    reportError(r, err, "convert failed")
+		    return
+	    }
+	    //convert to GB
+	    imageSize = imageSize << 30
+
+	    conn, err := getConnectionFromCacheByIP(ip)
+	    if err != nil {
+		    reportError(r, err, "no connections")
+		    return
+	    }
+	    log.Println(conn)
+
+	    ch := make(chan string, 100)
+	    go vminstall.VmInstall(conn, name, repo, autoinst, uint64(imageSize), ch)
+
+	    //map token_uuid <=> {channel,name,connection,ip}
 	    token := uuid.New()
-	    tokenMap.Set(token,m)
+	    t := TokenContentForVMInstall{Ch:ch, Name:name, Conn:conn, IPAddress:ip}
+	    tokenMap.Set(token,t)
+
 	    redirectStr := fmt.Sprintf("/install.html?token=%s",token)
 	    r.Redirect(redirectStr)
     })
@@ -212,7 +246,63 @@ func main() {
 
     }()
 
+    //EventRunDefault 
+    go func(){
+	    for {
+		    ret := libvirt.EventRunDefaultImpl()
+		    if ret == -1 {
+			    fmt.Println("RuN failed")
+			    break
+		    }
+    }}()
+
+
+    //start web server
     m.Run()
+}
+
+//register an event
+func myrebootcallback(c libvirt.VirConnection, d libvirt.VirDomain, event int, detail int){
+	fmt.Printf("Got event %d\n", event)
+	if event == libvirt.VIR_DOMAIN_EVENT_STOPPED {
+		fmt.Println("rebooting...")
+		d.Create()
+	}
+	//maybe needed to deregister
+}
+
+func registerRebootAndGetVncPort(name string, ip string, conn libvirt.VirConnection) string{
+	var domain libvirt.VirDomain
+	domain ,err := conn.LookupByName(name)
+	if err != nil {
+		log.Println("FAIL: find running domain to start vncviewer")
+		return ""
+	}
+	defer domain.Free()
+
+	xmlData, _ := domain.GetXMLDesc()
+	v := utils.ParseDomainXML(xmlData)
+
+	/* to get VNC port */
+	var vncPort string
+	if (v.Devices.Graphics.VNCPort == "-1") {
+		log.Println("FAIL:Can not get vnc port")
+		return ""
+	}
+
+	vncPort =  v.Devices.Graphics.VNCPort
+
+	ret := libvirt.ConnectDomainEventRegister(conn, domain, libvirt.VIR_DOMAIN_EVENT_ID_LIFECYCLE, libvirt.LifeCycleCallBackType(myrebootcallback))
+	if ret == -1 {
+		fmt.Println("can not autoreboot")
+	}
+
+
+	vncAddress := ip + ":" + vncPort
+	//e.g. http://147.2.207.233/vnc_auto.html?title=lwang-n1-sle12rc1&path=websockify?ip=147.2.207.233:5902
+
+	log.Println(fmt.Sprintf("/vnc_auto.html?title=%s&path=websockify?ip=%s",name, vncAddress))
+	return fmt.Sprintf("/vnc_auto.html?title=%s&path=websockify?ip=%s",name, vncAddress)
 }
 
 func stateReportHandler(ws *websocket.Conn) {
@@ -233,16 +323,36 @@ func stateReportHandler(ws *websocket.Conn) {
 		return
 	}
 
-	messageChannel := tokenMap.Get(token).(chan string)
+	tokenContent := tokenMap.Get(token).(TokenContentForVMInstall)
 
-	defer close(messageChannel)
-	defer tokenMap.Delete(token)
+	messageChannel := tokenContent.Ch
+	name := tokenContent.Name
+	conn := tokenContent.Conn
+	ip  := tokenContent.IPAddress
 
-	for m := range messageChannel{
-		//output some data
-		log.Println(m)
+
+	//get Domain
+	for m := range messageChannel {
 		websocket.Message.Send(ws, m)
+		if m == vminstall.VMINSTALL_SUCCESS {
+			log.Println("Install success")
+			websocket.Message.Send(ws, m)
+			//send vnc address
+			vncAddress := registerRebootAndGetVncPort(name, ip ,conn)
+			log.Printf("to connect installing vm %s", vncAddress)
+			websocket.Message.Send(ws, vncAddress)
+			break
+		}
+
+		if strings.Contains(m, vminstall.VMINSTALL_FAIL) == true {
+			log.Println("install failed")
+			websocket.Message.Send(ws, "FAIL")
+			//send fail reason
+			websocket.Message.Send(ws, m)
+			break
+		}
 	}
+	tokenMap.Delete(token)
 }
 
 func proxyHandler(ws *websocket.Conn) {
@@ -306,22 +416,6 @@ func proxyHandler(ws *websocket.Conn) {
 	case <-done:
 		break
 	}
-}
-
-func CreateVirtualMachine() chan string {
-	m := make(chan string, 100)
-	/* TODO add the real part */
-	go func() {
-		m <- "Start"
-		time.Sleep( 3 * time.Second)
-		m <- "Upload"
-		time.Sleep( 3 * time.Second)
-		m <- "Sleeping"
-		time.Sleep( 10 * time.Second)
-		m <- "CLOSE"
-		m <- "INFORMATION"
-	}()
-	return m
 }
 
 func reportError(r render.Render,err error, userError string) {

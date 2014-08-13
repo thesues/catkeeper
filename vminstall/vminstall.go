@@ -209,6 +209,12 @@ func reportFail(ch chan string, info string) {
 	}
 }
 
+func reportSuccess(ch chan string) {
+	if ch != nil {
+		ch <- VMINSTALL_SUCCESS
+	}
+}
+
 func generateFourRandom() string {
 	ret := ""
 	var base  = [4]string{"a","b","c","d"}
@@ -220,11 +226,6 @@ func generateFourRandom() string {
 	return ret
 }
 
-func reportSuccess(ch chan string) {
-	if ch != nil {
-		ch <- VMINSTALL_SUCCESS
-	}
-}
 
 // only support SUSE/x86 for now
 // memory is only 512M
@@ -243,6 +244,7 @@ func VmInstall(conn libvirt.VirConnection, vmname string, url string, autoyast s
 		reportFail(ch, "disk size too short")
 	}
 
+	//sender close the channel
 	if ch != nil {
 		defer close(ch)
 	}

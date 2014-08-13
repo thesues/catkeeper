@@ -12,3 +12,8 @@
 <input type="submit" name="submit" value="Update">
 </form>
 
+{{if .Active}}
+<form action="/vm/delete/{{.Id}}" method="POST">
+<input type="submit" name="submit" value="Delete">
+</form>
+{{end}}

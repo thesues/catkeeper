@@ -360,6 +360,18 @@ func fillVmData(domain libvirt.VirDomain, conn libvirt.VirConnection) VirtualMac
 	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain, MACMapping:macMapping, Disks:vmDisks, Connect:conn}
 }
 
+func getConnectionFromCacheByIP(ip string) (libvirt.VirConnection, error){
+	ok := ipaddressConnectionCache.Check(ip)
+	log.Println(ipaddressConnectionCache)
+	if ok == false {
+		return libvirt.VirConnection{}, errors.New("No connections to remote")
+	}
+	conn := ipaddressConnectionCache.Get(ip).(libvirt.VirConnection)
+	log.Println(conn)
+	return conn, nil
+
+}
+
 func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 	/* get libvirt connections */
 	numLiveHost := 0
@@ -381,7 +393,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 			go func(host *PhysicalMachine){
 				conn, err := libvirt.NewVirConnection("qemu+ssh://root@" + host.IpAddress + "/system")
 				if err != nil {
-					checkErr(err,"Can not connect to libvirt")
+					checkErr(err, fmt.Sprintf("failed to connect to %s", host.IpAddress))
 					host.Existing = false
 					connChan <- connResult{host:host,existing:false}
 					return
@@ -463,26 +475,28 @@ func RescanIPAddress(db *sql.DB) {
 
 		/* match and insert into database */
 		for _, host := range hosts {
-			if host.Existing {
-				for _, vm := range host.VirtualMachines {
-					for _ ,subnet := range vm.MACMapping {
-						ip := ""
-						_, ok := mapping[subnet.MAC]
-						if ok {
-							err := db.QueryRow("select IP from  macipmappingcache where MAC = ?", subnet.MAC).Scan(&ip)
-							switch {
-								case err ==  sql.ErrNoRows:
-									/*insert*/
-									db.Exec("insert into macipmappingcache(IP, MAC) values(?,?)", mapping[subnet.MAC], subnet.MAC)
-								case err != nil:
-									checkErr(err,"failed to select on macipmappingcache")
-								default:
-									if ip != mapping[subnet.MAC] {
-										db.Exec("udpate macipmappingcache set IP = ? wheree MAC = ?",mapping[subnet.MAC], subnet.MAC)
-									}
-
+			if host.Existing == false{
+				continue
+			}
+			for _, vm := range host.VirtualMachines {
+				for _ ,subnet := range vm.MACMapping {
+					ip := ""
+					_, ok := mapping[subnet.MAC]
+					if ok == false{
+						continue
+					}
+					err := db.QueryRow("select IP from  macipmappingcache where MAC = ?", subnet.MAC).Scan(&ip)
+					switch {
+						case err ==  sql.ErrNoRows:
+							/*insert*/
+							db.Exec("insert into macipmappingcache(IP, MAC) values(?,?)", mapping[subnet.MAC], subnet.MAC)
+						case err != nil:
+							checkErr(err,"failed to select on macipmappingcache")
+						default:
+							if ip != mapping[subnet.MAC] {
+								db.Exec("udpate macipmappingcache set IP = ? wheree MAC = ?",mapping[subnet.MAC], subnet.MAC)
 							}
-						}
+
 					}
 				}
 			}
