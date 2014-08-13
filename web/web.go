@@ -247,6 +247,8 @@ func main() {
     }()
 
     //EventRunDefault 
+    //this must be before any connection
+    libvirt.EventRegisterDefaultImpl()
     go func(){
 	    for {
 		    ret := libvirt.EventRunDefaultImpl()
