@@ -265,7 +265,7 @@ func main() {
 
 
     //start web server
-    m.Run()
+    http.ListenAndServe(":3000", m)
 }
 
 //register an event
