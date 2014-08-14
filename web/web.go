@@ -22,7 +22,10 @@ import (
 	"strings"
 )
 
+// token_id <=> TokenContentForVMInstall
 var tokenMap = utils.NewSafeMap()
+// domain.name <=> callbackid
+var callbackMap = utils.NewSafeMap()
 
 
 type TokenContentForVMInstall struct {
@@ -270,7 +273,12 @@ func myrebootcallback(c libvirt.VirConnection, d libvirt.VirDomain, event int, d
 		fmt.Println("rebooting...")
 		d.Create()
 	}
-	//maybe needed to deregister
+	name, _ := d.GetName()
+	if callbackMap.Check(name) == true {
+		callbackid := callbackMap.Get(name).(int)
+		libvirt.ConnectDomainEventDeregister(c, callbackid)
+		callbackMap.Delete(name)
+	}
 }
 
 func registerRebootAndGetVncPort(name string, ip string, conn libvirt.VirConnection) string{
@@ -297,7 +305,11 @@ func registerRebootAndGetVncPort(name string, ip string, conn libvirt.VirConnect
 	ret := libvirt.ConnectDomainEventRegister(conn, domain, libvirt.VIR_DOMAIN_EVENT_ID_LIFECYCLE, libvirt.LifeCycleCallBackType(myrebootcallback))
 	if ret == -1 {
 		fmt.Println("can not autoreboot")
+	} else {
+		callbackMap.Set(name, ret)
 	}
+
+
 
 
 	vncAddress := ip + ":" + vncPort

@@ -613,3 +613,8 @@ func ConnectDomainEventRegister(conn VirConnection,domain VirDomain, event int, 
 	result := int(r)
 	return result
 }
+
+
+func  ConnectDomainEventDeregister(conn VirConnection, callbackid int) {
+	C.virConnectDomainEventDeregisterAny(conn.ptr, C.int(callbackid))
+}
