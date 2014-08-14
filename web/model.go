@@ -220,7 +220,8 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 	for _, host := range hosts {
 		if host.Existing == true {
 			for _, vm := range host.VirtualMachines{
-				row := db.QueryRow("select Id, Owner, Description from virtualmachine where UUIDString = ?", vm.UUIDString)
+				row := db.QueryRow("select Id, Owner, Description from virtualmachine where UUIDString = ? and HostIpAddress = ?",
+														vm.UUIDString, vm.HostIpAddress)
 				if err = row.Scan(&Id, &Owner, &Description); err != nil {
 					/* not registered vm */
 					Owner = "no one is using me"
@@ -232,7 +233,7 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 						continue
 					}
 					/* re-select again*/
-					row = db.QueryRow("select Id, Owner, Description from virtualmachine where UUIDString = ?", vm.UUIDString)
+					row = db.QueryRow("select Id, Owner, Description from virtualmachine where UUIDString = ? and HostIpAddress = ?", vm.UUIDString, vm.HostIpAddress)
 					row.Scan(&Id, &Owner, &Description)
 					vm.Id = Id
 					vm.Owner = Owner
@@ -439,6 +440,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 			domains, _ := host.VirConn.ListAllDomains()
 			for _, virdomain := range domains {
 				vm := fillVmData(virdomain, conn)
+				vm.HostIpAddress = host.IpAddress
 				if vm.Active == true {
 					vm.VNCAddress = host.IpAddress
 				}
