@@ -98,6 +98,7 @@ func (this *VirtualMachine) Delete(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+
 	//remove from database
 	_, err = db.Exec("delete from virtualmachine where Id = ?", this.Id)
 	if err != nil {
@@ -115,7 +116,7 @@ func (this *VirtualMachine) Delete(db *sql.DB) error {
 		db.Exec("delete from macipmappingcache where MAC = ?", mac)
 	}
 
-	_, err = db.Exec("delete from vmmacmapping where Id = ?", this.Id)
+	_, err = db.Exec("delete from vmmacmapping where VmId = ?", this.Id)
 	if err != nil {
 		return err
 	}

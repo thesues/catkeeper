@@ -158,10 +158,12 @@ func main() {
 	    id,_ := strconv.Atoi(params["id"])
 	    vm := getVirtualMachine(db,id)
 	    err := vm.Delete(db)
+	    defer vm.Free()
 	    if err != nil {
 		    reportError(r, err, "I can not delete the vm")
 	    }
-	    r.Redirect("index.html")
+	    r.HTML(200, "vm" ,vm)
+
     })
 
     m.Post("/rescan", func(req *http.Request) {
