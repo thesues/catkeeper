@@ -193,6 +193,9 @@ func createRemoteBootPool(conn libvirt.VirConnection) (libvirt.VirStoragePool, e
 			return libvirt.VirStoragePool{}, err
                 }
         }
+	if pool.IsActive() == false {
+		pool.Create()
+	}
 	return pool,nil
 }
 
