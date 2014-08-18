@@ -67,7 +67,12 @@ func main() {
 		    IpAddress string
 	    }
 
-	    var hosts []HostInfo
+		type Hosts struct {
+			Hosts []HostInfo
+		}
+
+	    //var hosts []HostInfo
+		var hosts Hosts
 
 	    rows, err := db.Query("select Name,IpAddress from physicalmachine")
 	    if err != nil {
@@ -75,10 +80,12 @@ func main() {
 	    }
 	    for rows.Next() {
 		    rows.Scan(&Name, &IpAddress)
-		    hosts = append(hosts, HostInfo{Name, IpAddress})
+		    hosts.Hosts = append(hosts.Hosts, HostInfo{Name, IpAddress})
+			//hosts = append(hosts, HostInfo{Name, IpAddress})
 	    }
 	    log.Println(hosts)
-	    r.HTML(200, "create", hosts)
+	    //r.HTML(200, "create", hosts)
+		r.JSON(200, hosts)
     })
 
     m.Post("/create", func(r render.Render, req *http.Request) {
@@ -112,8 +119,12 @@ func main() {
 	    t := TokenContentForVMInstall{Ch:ch, Name:name, Conn:conn, IPAddress:ip}
 	    tokenMap.Set(token,t)
 
-	    redirectStr := fmt.Sprintf("/install.html?token=%s",token)
-	    r.Redirect(redirectStr)
+		type TokenJson struct{
+				Token string
+		}
+		var tokenJson TokenJson
+		tokenJson.Token = token
+		r.JSON(200, tokenJson)
     })
 
 
