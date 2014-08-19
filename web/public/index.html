@@ -10,7 +10,7 @@
   <body style="margin: 20px;">
   <div class="container">
   <h1>Machine List</h1>
-  <a href="/create" class="btn btn-warning btn-sm active" role="button">CREATE VIRTUALMACHINE</a>
+  <button type="button" class="btn btn-warning btn-sm active" role="button" onclick="display_vm_create()">CREATE VIRTUALMACHINE</button>
   <a href="/add" class="btn btn-primary btn-sm active" role="button">ADD PHYSICALMACHINE</a>
   <input align="left" type="text" id="vm_filter" value=""></input>
   </div>
@@ -18,6 +18,9 @@
   </div>
 
   <div class="modal fade" id="vm_edit_div" tabindex="-1" role="dialog-modal" aria-labelledby="myModalLabel" aria-hidden="true">
+  </div>
+
+  <div class="modal fade" id="vm_create_div" tabindex="-1" role="dialog-modal" aria-labelledby="myCreateLabel" aria-hidden="true">
   </div>
 
   <div class="modal fade" id="vm_delete_div" tabindex="-1" role="dialog-modal" aria-labelledby="myModalLabelDelete" aria-hidden="true">
@@ -102,6 +105,39 @@
 	</div>
   </script>
 
+  <script id="vm_create_script" type="text/x-handlebars-template">
+  	<!-- Modal -->
+	<div class="modal-dialog">
+		<div class="modal-content">
+			<div class="modal-header">
+				<button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+				<h2 class="modal-title" id="myCreateLabel" align="center">Virtual Machine Configuration</h2>
+			</div>
+			<div class="modal-body">
+					<h3><span class="label label-default">Name</span></h3>
+					<input id="vm_create_name" type="text" class="form-control" placeholder="">
+					<h3><span class="label label-default">Owner</span></h3>
+					<input id="vm_create_owner" type="text" class="form-control" placeholder="">
+					<h3><span class="label label-default">Description</span></h3>
+					<input id="vm_create_description" type="text" class="form-control" placeholder="">
+					<h3><span class="label label-default">Repo</span></h3>
+					<input id="vm_create_repo" type="text" class="form-control" placeholder="">
+					<h3><span class="label label-default">Disk Size[GB]</span></h3>
+					<input id="vm_create_disk" type="text" class="form-control" placeholder="">
+					<h3><span class="label label-default">Autoyast</span></h3>
+					<input id="vm_create_autoyast" type="text" class="form-control" placeholder="">
+					<h3><span class="label label-default">Host</span></h3>
+					<select class="form-control" Name="vm_create_host" id="vm_create_host">
+					{{#hosts Hosts}}{{Name}},{{IpAddress}}{{/hosts}}
+					</select>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-primary" onclick="submit_create_vm($('#vm_create_name').value)" data-dismiss="modal">Create</button>
+				<button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+			</div>
+		</div>
+	</div>
+  </script>
 
   <script id="host-end" type="text/x-handlebars-template">
   </tbody>
@@ -288,6 +324,7 @@
 						  });
 	}
 
+
 	function show_edit(data)
 	{
 			var vm_edit_div = document.getElementById("vm_edit_div");
@@ -297,7 +334,6 @@
 			$('#vm_edit_div').modal({
 							backdrop:"static"
 							});
-			//clear the vm edit div html contents so that other vm edit can be displayed correctly.
 	}
 
 	function display_vm_edit(vm_id)
@@ -306,6 +342,82 @@
 			response.done(show_edit);
 			response.fail(function(){
 							alert("failed to get vm information for " + vm_id);
+							});
+	}
+
+	function submit_create_vm()
+	{
+			var name = document.getElementById("vm_create_name");
+			var owner = document.getElementById("vm_create_owner");
+			var desc = document.getElementById("vm_create_description");
+			var repo = document.getElementById("vm_create_repo");
+			var disk = document.getElementById("vm_create_disk");
+			var autoyast = document.getElementById("vm_create_autoyast");
+			var host = document.getElementById("vm_create_host");
+			var ip = host.options[host.selectedIndex].value;
+
+			if('' == name.value)
+			{
+					alert("Pleaer input VM name!");
+			}
+			else if('' == disk.value)
+			{
+					alert("Please input correct disk size(GB)!");
+			}
+			else if('' == repo.value)
+			{
+					alert("Please input correct repo path!");
+			}
+
+			$.post("/create", {Name: name.value,
+							IpAddress: ip,
+							repo: repo.value,
+							disk: disk.value,
+							autoinst: autoyast.value
+							})
+					.done(function(data){
+									var win = window.open('/install.html?token=' + data.Token);
+									if(win) {
+									win.focus();
+									query();
+									}
+									else {
+									alert("Please allow popup for this site!");
+									}
+									}
+						 )
+					.fail(function(){
+									alert("failed to create vm: " + name.value);
+									});
+	}
+
+	function show_create(data)
+	{
+			var vm_create_div = document.getElementById("vm_create_div");
+			vm_create_div.innerHTML = "";
+			Handlebars.registerHelper('hosts', function(items, options){
+							var out="";
+							for(var i=0, l=items.length; i<l; i++){
+								var name = options.fn(items[i]).split(',')[0];
+								var ip = options.fn(items[i]).split(',')[1];
+								out = out + '<option value=' + ip + '>' + name + '</option>';
+							}
+							return out;
+			});
+
+			var vm_create_div_template = Handlebars.compile($("#vm_create_script").html());
+			vm_create_div.innerHTML = vm_create_div_template(data);
+			$('#vm_create_div').modal({
+							backdrop: "static"
+							});
+	}
+
+	function display_vm_create()
+	{
+			var response = $.get("/create");
+			response.done(show_create);
+			response.fail(function(){
+							alert("failed to create vm");
 							});
 	}
 
