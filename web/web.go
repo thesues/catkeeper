@@ -84,7 +84,6 @@ func main() {
 			//hosts = append(hosts, HostInfo{Name, IpAddress})
 	    }
 	    log.Println(hosts)
-	    //r.HTML(200, "create", hosts)
 		r.JSON(200, hosts)
     })
 
