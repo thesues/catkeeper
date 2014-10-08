@@ -1,3 +1,6 @@
 1. use libvirt network interface to create br0/br1
 2. there must be some virtual machined recored in database but not existed any more.
    find a way to clean them
+3. libvirt xml changed
+4. add makefile
+5. put css,jquery.js to local directory
