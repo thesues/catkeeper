@@ -1,8 +1,8 @@
 package main
 import (
-	"dmzhang/catkeeper/libvirt"
-	"dmzhang/catkeeper/vminstall"
-	"dmzhang/catkeeper/utils"
+	"github.com/thesues/catkeeper/libvirt"
+	"github.com/thesues/catkeeper/vminstall"
+	"github.com/thesues/catkeeper/utils"
 	"fmt"
 	"flag"
 	"os/exec"

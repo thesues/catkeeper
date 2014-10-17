@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	"errors"
-	"dmzhang/catkeeper/libvirt"
-	"dmzhang/catkeeper/nmap"
-	"dmzhang/catkeeper/utils"
+	"github.com/thesues/catkeeper/libvirt"
+	"github.com/thesues/catkeeper/nmap"
+	"github.com/thesues/catkeeper/utils"
 
 	_ "github.com/mattn/go-sqlite3"
 )

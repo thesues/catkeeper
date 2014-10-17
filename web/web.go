@@ -16,9 +16,9 @@ import (
 	"time"
 	"sync/atomic"
 	"code.google.com/p/go-uuid/uuid"
-	"dmzhang/catkeeper/utils"
-	"dmzhang/catkeeper/libvirt"
-	"dmzhang/catkeeper/vminstall"
+	"github.com/thesues/catkeeper/utils"
+	"github.com/thesues/catkeeper/libvirt"
+	"github.com/thesues/catkeeper/vminstall"
 	"strings"
 )
 

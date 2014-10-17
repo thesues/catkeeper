@@ -1,6 +1,6 @@
 package vminstall
 import (
-	"dmzhang/catkeeper/libvirt"
+	"github.com/thesues/catkeeper/libvirt"
 	"fmt"
 	"testing"
 )

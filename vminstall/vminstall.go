@@ -2,7 +2,7 @@ package vminstall
 import (
 	"text/template"
 	"log"
-	"dmzhang/catkeeper/libvirt"
+	"github.com/thesues/catkeeper/libvirt"
 	"bytes"
 	"errors"
 	"regexp"

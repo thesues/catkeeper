@@ -3,7 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"dmzhang/catkeeper/libvirt"
+	"github.com/thesues/catkeeper/libvirt"
 
 	_ "github.com/mattn/go-sqlite3"
 	"testing"
