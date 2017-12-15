@@ -160,10 +160,8 @@
             WebUtil.init_logging(WebUtil.getQueryVar('logging', 'warn'));
             document.title = unescape(WebUtil.getQueryVar('title', 'noVNC'));
             // By default, use the host and port of server that served this file
-            //host = WebUtil.getQueryVar('host', window.location.hostname);
-            //port = WebUtil.getQueryVar('port', window.location.port);
-	    host = '127.0.0.1';
-	    port = '3000';
+            host = WebUtil.getQueryVar('host', window.location.hostname);
+            port = WebUtil.getQueryVar('port', window.location.port);
 
 
             // if port == 80 (or 443) then it won't be present and should be
