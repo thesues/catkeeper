@@ -2,13 +2,13 @@ package main
 
 import (
 	"database/sql"
-	"log"
 	"fmt"
+	"log"
 
 	"errors"
-	"dmzhang/catkeeper/libvirt"
-	"dmzhang/catkeeper/nmap"
-	"dmzhang/catkeeper/utils"
+	libvirt "github.com/libvirt/libvirt-go"
+	"github.com/thesues/catkeeper/nmap"
+	"github.com/thesues/catkeeper/utils"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -18,62 +18,59 @@ type PhysicalMachine struct {
 	Id          int
 	IpAddress   string
 	Description string
-	Name	    string
+	Name        string
 
 	/* libvirt */
-	Existing   bool
+	Existing        bool
 	VirtualMachines []*VirtualMachine
-	VirConn    libvirt.VirConnection
+	Conn            libvirt.Connect
 }
 
-func (p *PhysicalMachine) String() string{
+func (p *PhysicalMachine) String() string {
 	var result = ""
 	result += fmt.Sprintf("%s(%s) running?%t\n", p.Name, p.IpAddress, p.Existing)
-	for _, vmPtr:= range p.VirtualMachines{
-		result += fmt.Sprintf("%s\n",vmPtr)
+	for _, vmPtr := range p.VirtualMachines {
+		result += fmt.Sprintf("%s\n", vmPtr)
 	}
 
 	return result
 }
 
-
 /* used to describe mappings between MAC<=>IP */
 type SubNet struct {
 	MAC string
-	IP string
+	IP  string
 }
 
 type VirtualMachine struct {
 	/* database */
-	Id          int
-	UUIDString  string /*set by libvirt*/
-	Owner       string
-	Description string
+	Id            int
+	UUIDString    string /*set by libvirt*/
+	Owner         string
+	Description   string
 	HostIpAddress string
 
 	/* libvirt */
-	Name string
-	Active bool
+	Name       string
+	Active     bool
 	VNCAddress string
 	VNCPort    string
-	Disks     []string
-	VirDomain libvirt.VirDomain
+	Disks      []string
+	Domain     *libvirt.Domain
 
-	Connect  libvirt.VirConnection
+	Connect *libvirt.Connect
 
 	/*mapping MAC=>IP*/
 	MACMapping []SubNet
 }
-
 
 func (this *VirtualMachine) String() string {
 	return fmt.Sprintf("%s %s:%s", this.Name, this.VNCAddress, this.VNCPort)
 
 }
 
-
-func (this *VirtualMachine) Start() error{
-	err := this.VirDomain.Create()
+func (this *VirtualMachine) Start() error {
+	err := this.Domain.Create()
 	return err
 
 }
@@ -85,16 +82,16 @@ func (this *VirtualMachine) Delete(db *sql.DB) error {
 		log.Printf("deleteing disk %s", diskpath)
 		v, err := this.Connect.LookupStorageVolByPath(diskpath)
 		if err != nil {
-			log.Printf("%s can not be found by libvirt",diskpath)
+			log.Printf("%s can not be found by libvirt", diskpath)
 			continue
 		}
 		//delete storage
-		v.Delete()
+		v.Delete(libvirt.STORAGE_VOL_DELETE_NORMAL)
 		v.Free()
 	}
 
 	//remove domain
-	err := this.VirDomain.Delete()
+	err := this.Domain.Undefine()
 	if err != nil {
 		return err
 	}
@@ -124,59 +121,55 @@ func (this *VirtualMachine) Delete(db *sql.DB) error {
 }
 
 func (this *VirtualMachine) Stop() error {
-	err := this.VirDomain.Shutdown()
+	err := this.Domain.Shutdown()
 	return err
 }
 
-
 func (this *VirtualMachine) ForceStop() error {
-	err := this.VirDomain.Destroy()
+	err := this.Domain.Destroy()
 	return err
 }
 
 func (this *VirtualMachine) Free() error {
-	err := this.VirDomain.Free()
+	err := this.Domain.Free()
 	return err
 }
 
 func (this *VirtualMachine) UpdateDatabase(db *sql.DB, owner string, description string) error {
 	if owner != "" && description != "" {
 		_, err := db.Exec("update virtualmachine set Owner=?,Description=? where Id=?", owner, description, this.Id)
-		if err!= nil {
+		if err != nil {
 			return err
-		}else {
+		} else {
 			return nil
 		}
-	} else {//can not be updated
+	} else { //can not be updated
 		return errors.New("owner and description must have values")
 	}
 }
 
-
 // global variables: do not like global variables
-// cached VirConnection
-//IpAddress => VirConnection
+// cached Connect
+//IpAddress => Connect
 var ipaddressConnectionCache = utils.NewSafeMap()
-
-
 
 func getVirtualMachine(db *sql.DB, Id int) *VirtualMachine {
 	var (
-		UUIDString string
-		Owner  string
-		Description string
+		UUIDString    string
+		Owner         string
+		Description   string
 		HostIpAddress string
 	)
 
-	row  := db.QueryRow("select Id,UUIDString,Owner, Description, HostIpAddress from virtualmachine where Id=?",Id)
-	if err := row.Scan(&Id, &UUIDString, &Owner, &Description, &HostIpAddress); err !=nil {
+	row := db.QueryRow("select Id,UUIDString,Owner, Description, HostIpAddress from virtualmachine where Id=?", Id)
+	if err := row.Scan(&Id, &UUIDString, &Owner, &Description, &HostIpAddress); err != nil {
 		checkErr(err, "failed to scan in getVirtualMachine")
 		return nil
 	}
-	vm, err :=  readLibvirtVM(HostIpAddress, UUIDString)
+	vm, err := readLibvirtVM(HostIpAddress, UUIDString)
 
-	if (err != nil) {
-		checkErr(err,"failed to get information from libvirt")
+	if err != nil {
+		checkErr(err, "failed to get information from libvirt")
 		return nil
 	}
 	vm.Id = Id
@@ -209,19 +202,18 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 			checkErr(err, "row scan failed")
 			return nil
 		}
-		hosts = append(hosts, &PhysicalMachine{Name:Name, Id:Id, IpAddress:IpAddress, Description:Description, Existing:false})
+		hosts = append(hosts, &PhysicalMachine{Name: Name, Id: Id, IpAddress: IpAddress, Description: Description, Existing: false})
 	}
 
 	/* read libvirt and set exist flag in PhysicalMachine*/
 	readLibvirtPysicalMachine(hosts)
 
-
 	/* read virtualmachine from database */
 	for _, host := range hosts {
 		if host.Existing == true {
-			for _, vm := range host.VirtualMachines{
+			for _, vm := range host.VirtualMachines {
 				row := db.QueryRow("select Id, Owner, Description from virtualmachine where UUIDString = ? and HostIpAddress = ?",
-														vm.UUIDString, vm.HostIpAddress)
+					vm.UUIDString, vm.HostIpAddress)
 				if err = row.Scan(&Id, &Owner, &Description); err != nil {
 					/* not registered vm */
 					Owner = "no one is using me"
@@ -240,9 +232,9 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 					vm.Description = Description
 					/* insert into vm-mac-mapping */
 					/* used to clean unused MAC in the future */
-					for _ , subnet := range vm.MACMapping {
-						if _,err := db.Exec("insert into vmmacmapping(VmId, MAC) values (?,?)", Id,subnet.MAC ); err != nil {
-							checkErr(err,"failed to insert vmmacmapping")
+					for _, subnet := range vm.MACMapping {
+						if _, err := db.Exec("insert into vmmacmapping(VmId, MAC) values (?,?)", Id, subnet.MAC); err != nil {
+							checkErr(err, "failed to insert vmmacmapping")
 						}
 					}
 
@@ -257,8 +249,8 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 					}
 					for i, subnet := range vm.MACMapping {
 						ip := ""
-						row := db.QueryRow("select IP from macipmappingcache where MAC = ?",subnet.MAC)
-						if err := row.Scan(&ip);err != nil {
+						row := db.QueryRow("select IP from macipmappingcache where MAC = ?", subnet.MAC)
+						if err := row.Scan(&ip); err != nil {
 							continue
 						}
 						vm.MACMapping[i].IP = ip
@@ -270,99 +262,105 @@ func getListofPhysicalMachineAndVirtualMachine(db *sql.DB) []*PhysicalMachine {
 	}
 	// delete absoleted vm from database
 	/*
-	rows, err = db.Query("select Id from virtualmachine")
-	if err != nil {
-		checkErr(err,"select Id from virtualmachine failed")
-		return hosts
-	}
+			rows, err = db.Query("select Id from virtualmachine")
+			if err != nil {
+				checkErr(err,"select Id from virtualmachine failed")
+				return hosts
+			}
 
 
-       for rows.Next() {
-               rows.Scan(&Id)
-               if _,ok := mapVMIDtoVirtualMachine[Id]; ok == true {
-                       continue
-               }else {
-                       db.Exec("delete from virtualmachine where Id=?",Id)
-               }
-       }
-       */
+		       for rows.Next() {
+		               rows.Scan(&Id)
+		               if _,ok := mapVMIDtoVirtualMachine[Id]; ok == true {
+		                       continue
+		               }else {
+		                       db.Exec("delete from virtualmachine where Id=?",Id)
+		               }
+		       }
+	*/
 	return hosts
 
 }
 
 func readLibvirtVM(HostIpAddress string, UUIDString string) (VirtualMachine, error) {
-	var conn libvirt.VirConnection
+	var connPtr *libvirt.Connect
 	var err error
 	ok := ipaddressConnectionCache.Check(HostIpAddress)
 	if ok == false {
-		conn, err = libvirt.NewVirConnection("qemu+ssh://root@" + HostIpAddress + "/system")
+		connPtr, err = libvirt.NewConnect("qemu+ssh://root@" + HostIpAddress + "/system")
 		if err != nil {
-			return VirtualMachine{},err
+			return VirtualMachine{}, err
 		}
-		ipaddressConnectionCache.Set(HostIpAddress, conn)
+		ipaddressConnectionCache.Set(HostIpAddress, *connPtr)
 	} else {
 		//?How to deal with connection's not alive
-		conn = ipaddressConnectionCache.Get(HostIpAddress).(libvirt.VirConnection)
-		if ok ,_ := conn.IsAlive();!ok {
+		connPtr = ipaddressConnectionCache.Get(HostIpAddress).(*libvirt.Connect)
+		if ok, _ := connPtr.IsAlive(); !ok {
 			log.Printf("remote %s is not alive", HostIpAddress)
-			conn, err = libvirt.NewVirConnection("qemu+ssh://root@" + HostIpAddress + "/system")
+			connPtr, err = libvirt.NewConnect("qemu+ssh://root@" + HostIpAddress + "/system")
 			if err != nil {
 				ipaddressConnectionCache.Delete(HostIpAddress)
-				return VirtualMachine{},err
+				return VirtualMachine{}, err
 			}
 			/*TODO Write Lock*/
-			ipaddressConnectionCache.Set(HostIpAddress, conn)
+			ipaddressConnectionCache.Set(HostIpAddress, *connPtr)
 		}
 	}
 
-	domain, err := conn.LookupByUUIDString(UUIDString)
+	domain, err := connPtr.LookupDomainByUUIDString(UUIDString)
 	if err != nil {
-		return VirtualMachine{},err
+		return VirtualMachine{}, err
 	}
-	vm := fillVmData(domain, conn)
+	vm := fillVmData(domain, connPtr)
 
-	return vm,nil
+	return vm, nil
 }
 
-
 //TODO: in the futhure, use vm := VirtualMachine{};fillvmData(domain,vm)
-func fillVmData(domain libvirt.VirDomain, conn libvirt.VirConnection) VirtualMachine {
+func fillVmData(domain *libvirt.Domain, conn *libvirt.Connect) VirtualMachine {
 
-	xmlData, _ := domain.GetXMLDesc()
+	//xmlData, _ := domain.GetXMLDesc(libvirt.DOMAIN_XML_SECURE | libvirt.DOMAIN_XML_INACTIVE)
+	xmlData, _ := domain.GetXMLDesc(libvirt.DOMAIN_XML_SECURE)
 	v := utils.ParseDomainXML(xmlData)
 	/* if VNCPort is -1, this means the domain is closed */
 	var active = false
 	var vncPort = ""
-	if (v.Devices.Graphics.VNCPort != "-1") {
-		active = true
-		vncPort =  v.Devices.Graphics.VNCPort
+
+	//TODO: handle the error
+	active, err := domain.IsActive()
+	if err != nil {
+		checkErr(err, "FIXME: libvirt internal error: IsActive fail")
 	}
 
+	if active {
+		vncPort = v.Devices.Graphics.VNCPort
+	}
+	log.Printf("vnc port %s", vncPort)
 	/* fill MAC Address */
-	macMapping := make([]SubNet,0)
+	macMapping := make([]SubNet, 0)
 	for _, i := range v.Devices.Interface {
 		if i.Type == "bridge" {
-			macMapping = append(macMapping, SubNet{MAC:i.MAC.Address, IP:"not detected"})
+			macMapping = append(macMapping, SubNet{MAC: i.MAC.Address, IP: "not detected"})
 		}
 	}
 
 	/* fill Disk info */
 
-	var vmDisks = make([]string,0)
+	var vmDisks = make([]string, 0)
 	for _, i := range v.Devices.Disks {
 		vmDisks = append(vmDisks, i.Source.Path)
 	}
 
-	return VirtualMachine{UUIDString:v.UUID, Name:v.Name, Active:active, VNCPort:vncPort,VirDomain:domain, MACMapping:macMapping, Disks:vmDisks, Connect:conn}
+	return VirtualMachine{UUIDString: v.UUID, Name: v.Name, Active: active, VNCPort: vncPort, Domain: domain, MACMapping: macMapping, Disks: vmDisks, Connect: conn}
 }
 
-func getConnectionFromCacheByIP(ip string) (libvirt.VirConnection, error){
+func getConnectionFromCacheByIP(ip string) (*libvirt.Connect, error) {
 	ok := ipaddressConnectionCache.Check(ip)
 	log.Println(ipaddressConnectionCache)
 	if ok == false {
-		return libvirt.VirConnection{}, errors.New("No connections to remote")
+		return &libvirt.Connect{}, errors.New("No connections to remote")
 	}
-	conn := ipaddressConnectionCache.Get(ip).(libvirt.VirConnection)
+	conn := ipaddressConnectionCache.Get(ip).(*libvirt.Connect)
 	log.Println(conn)
 	return conn, nil
 
@@ -371,78 +369,77 @@ func getConnectionFromCacheByIP(ip string) (libvirt.VirConnection, error){
 func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 	/* get libvirt connections */
 	numLiveHost := 0
-	var conn libvirt.VirConnection
+	var connPtr *libvirt.Connect
 
 	/* use this type in chanStruct */
 	type connResult struct {
-		host *PhysicalMachine
-		conn libvirt.VirConnection
+		host     *PhysicalMachine
+		conn     *libvirt.Connect
 		existing bool
 	}
 	connChan := make(chan connResult)
 	var numGoroutines = 0
 
-	for _, host := range(hosts) {
+	for _, host := range hosts {
 		ok := ipaddressConnectionCache.Check(host.IpAddress)
 		if ok == false {
-			numGoroutines ++
-			go func(host *PhysicalMachine){
-				conn, err := libvirt.NewVirConnection("qemu+ssh://root@" + host.IpAddress + "/system")
+			numGoroutines++
+			go func(host *PhysicalMachine) {
+				connPtr, err := libvirt.NewConnect("qemu+ssh://root@" + host.IpAddress + "/system")
 				if err != nil {
 					checkErr(err, fmt.Sprintf("failed to connect to %s", host.IpAddress))
 					host.Existing = false
-					connChan <- connResult{host:host,existing:false}
+					connChan <- connResult{host: host, existing: false}
 					return
 				}
-				connChan <- connResult{host:host,conn:conn,existing:true}
+				connChan <- connResult{host: host, conn: connPtr, existing: true}
 			}(host)
-		} else  {
+		} else {
 			/* existing a conn which is alive */
-			conn = ipaddressConnectionCache.Get(host.IpAddress).(libvirt.VirConnection)
-			if ok ,_ := conn.IsAlive();ok {
-				host.VirConn =  conn
+			connPtr = ipaddressConnectionCache.Get(host.IpAddress).(*libvirt.Connect)
+			if ok, _ := connPtr.IsAlive(); ok {
+				host.Conn = *connPtr
 				host.Existing = true
-				numLiveHost ++
-			/* existing a conn which is dead */
+				numLiveHost++
+				/* existing a conn which is dead */
 			} else {
 				log.Printf("remove %s is not alive", host.IpAddress)
 				host.Existing = false
 				ipaddressConnectionCache.Delete(host.IpAddress)
 				/* TODO ?if close the connectin */
-				conn.CloseConnection()
+				connPtr.Close()
 			}
 		}
 	}
 
-	for i:=0;i < numGoroutines ;i++{
+	for i := 0; i < numGoroutines; i++ {
 		r := <-connChan
-		if r.existing{
-			r.host.VirConn = r.conn
+		if r.existing {
+			r.host.Conn = *r.conn
 			r.host.Existing = true
 			/*Write Lock*/
 			ipaddressConnectionCache.Set(r.host.IpAddress, r.conn)
-			numLiveHost ++
+			numLiveHost++
 		}
 	}
 
-
-
-	/* all the PhysicalMachines are ready, VirConnection was connected now */
-	/* receive data from VirConnections */
+	/* all the PhysicalMachines are ready, Connect was connected now */
+	/* receive data from Connects */
 
 	done := make(chan bool)
-	for _, host := range(hosts) {
+	for _, host := range hosts {
 		if host.Existing == false {
 			continue
 		}
 
-		go func(host *PhysicalMachine){
-			domains, _ := host.VirConn.ListAllDomains()
+		go func(host *PhysicalMachine) {
+			domains, _ := host.Conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE + libvirt.CONNECT_LIST_DOMAINS_INACTIVE)
 			for _, virdomain := range domains {
-				vm := fillVmData(virdomain, conn)
+				vm := fillVmData(&virdomain, connPtr)
 				vm.HostIpAddress = host.IpAddress
 				if vm.Active == true {
 					vm.VNCAddress = host.IpAddress
+					log.Printf("vnc address: %s", host.IpAddress)
 				}
 				//will not have any operations on vm, virdomain could be freeed
 				virdomain.Free()
@@ -452,7 +449,7 @@ func readLibvirtPysicalMachine(hosts []*PhysicalMachine) {
 		}(host)
 	}
 	/* wait for all ListAllDomains finish */
-	for i:=0; i< numLiveHost ; i++ {
+	for i := 0; i < numLiveHost; i++ {
 		<-done
 	}
 
@@ -462,37 +459,37 @@ func RescanIPAddress(db *sql.DB) {
 
 	hosts := getListofPhysicalMachineAndVirtualMachine(db)
 
-	for _, myIP:= range utils.LocalIPs() {
+	for _, myIP := range utils.LocalIPs() {
 		/* scan */
-		mapping,err := nmap.Nmap(myIP)
+		mapping, err := nmap.Nmap(myIP)
 		if err != nil {
-			checkErr(err,"nmap failed")
+			checkErr(err, "nmap failed")
 			continue
 		}
 
 		/* match and insert into database */
 		for _, host := range hosts {
-			if host.Existing == false{
+			if host.Existing == false {
 				continue
 			}
 			for _, vm := range host.VirtualMachines {
-				for _ ,subnet := range vm.MACMapping {
+				for _, subnet := range vm.MACMapping {
 					ip := ""
 					_, ok := mapping[subnet.MAC]
-					if ok == false{
+					if ok == false {
 						continue
 					}
 					err := db.QueryRow("select IP from  macipmappingcache where MAC = ?", subnet.MAC).Scan(&ip)
 					switch {
-						case err ==  sql.ErrNoRows:
-							/*insert*/
-							db.Exec("insert into macipmappingcache(IP, MAC) values(?,?)", mapping[subnet.MAC], subnet.MAC)
-						case err != nil:
-							checkErr(err,"failed to select on macipmappingcache")
-						default:
-							if ip != mapping[subnet.MAC] {
-								db.Exec("udpate macipmappingcache set IP = ? wheree MAC = ?",mapping[subnet.MAC], subnet.MAC)
-							}
+					case err == sql.ErrNoRows:
+						/*insert*/
+						db.Exec("insert into macipmappingcache(IP, MAC) values(?,?)", mapping[subnet.MAC], subnet.MAC)
+					case err != nil:
+						checkErr(err, "failed to select on macipmappingcache")
+					default:
+						if ip != mapping[subnet.MAC] {
+							db.Exec("udpate macipmappingcache set IP = ? wheree MAC = ?", mapping[subnet.MAC], subnet.MAC)
+						}
 
 					}
 				}
@@ -501,7 +498,6 @@ func RescanIPAddress(db *sql.DB) {
 	}
 
 }
-
 
 func checkErr(err error, msg string) {
 	if err != nil {
